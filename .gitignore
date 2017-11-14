@@ -1,3 +1,7 @@
 # ignore pycharm stuff
 
 .idea/*
+
+# ignore compiled cython
+pyrostex/*.c  # cython c files
+pyrostex/*.so  # compiled c
