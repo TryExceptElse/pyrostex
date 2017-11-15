@@ -1,3 +1,5 @@
+from time import time
+
 from pyrostex.procede import Spheroid
 from settings import ROOT_PATH
 
@@ -18,4 +20,7 @@ def make_sample_spheroid():
 
 
 if __name__ == '__main__':
+    start_t = time()
     make_sample_spheroid()
+    end_t = time()
+    print('Done. Elapsed time: {}'.format(end_t - start_t))

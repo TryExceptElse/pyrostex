@@ -1,3 +1,5 @@
+# cython: infer_types=True, boundscheck=False, nonecheck=False, language_level=3,
+
 """
 Maps for storing data about a map for a sphere.
 """
@@ -6,10 +8,13 @@ import numpy as np
 import png
 import itertools as itr
 
+cimport numpy as np
+
 
 from mathutils import Vector
 
-from math import radians, cos, sin, atan2, sqrt, pow
+from math import radians
+from libc.math cimport cos, sin, atan2, sqrt, pow
 
 MIN_LAT = radians(-90)
 MAX_LAT = radians(90)
@@ -21,10 +26,14 @@ LON_RANGE = MAX_LON - MIN_LON
 QTR_PI = radians(45)
 
 
-class TextureMap:
+cdef class TextureMap:
     """
     Abstract map
     """
+
+    cdef:
+        np.ndarray _arr
+        public int width, height
 
     def __init__(self, **kwargs):
         """
@@ -37,7 +46,7 @@ class TextureMap:
                 "Only one of {'path', 'arr', 'prototype'} should be passed")
         if 'path' in kwargs:
             path = kwargs['path']
-            self._arr = self.load_arr(path)
+            self.set_arr(self.load_arr(path))
         elif 'arr' in kwargs:
             self.set_arr(kwargs['arr'])
         # get data from prototype if one was passed
@@ -45,9 +54,9 @@ class TextureMap:
             p = kwargs.get('prototype')
             width = kwargs.get('width', p.width)
             height = kwargs.get('height', p.height)
-            self._arr = self.make_arr(width, height, p.data_type)
-            assert self.height == height
-            assert self.width == width
+            self.set_arr(self.make_arr(width, height, p.data_type))
+            assert self.height == height, (self.height, height)
+            assert self.width == width, (self.width, width)
             for x, y in itr.product(range(width), range(height)):
                 # get vector corresponding to position
                 vector = self.get_vector_from_xy((x, y))
@@ -58,22 +67,26 @@ class TextureMap:
             width = kwargs.get('width', 2048 * 3)
             height = kwargs.get('height', 2048 * 2)
             data_type = kwargs.get('data_type', np.uint8)
-            self._arr = self.make_arr(width, height, data_type)
+            self.set_arr(self.make_arr(width, height, data_type))
 
-    def load_arr(self, path):
+        assert self.width
+        assert self.height
+
+    cpdef load_arr(self, path):
         return np.load(path, allow_pickle=False)
 
-    def save(self, path):
+    cpdef save(self, path):
         np.save(path, self._arr, allow_pickle=False)
 
-    def make_arr(self, width, height, data_type=np.uint8):
+    cpdef make_arr(self, width, height, data_type=np.uint8):
         arr = np.ndarray((height, width), data_type)
         return arr
 
-    def set_arr(self, arr):
+    cpdef set_arr(self, arr):
         self._arr = arr
+        self.height, self.width = arr.shape
 
-    def v_from_lat_lon(self, pos):
+    cpdef v_from_lat_lon(self, pos):
         """
         Gets pixel value at passed latitude and longitude.
         :param pos: tuple(lat, lon)
@@ -81,7 +94,7 @@ class TextureMap:
         """
         raise NotImplementedError
 
-    def v_from_xy(self, pos):
+    cpdef v_from_xy(self, pos):
         """
         Gets pixel value at passed position on this map.
         :param pos: pos
@@ -136,10 +149,9 @@ class TextureMap:
             left = left1 * b_mod + left0 * (1 - b_mod)
             right = right1 * b_mod + right0 * (1 - b_mod)
             vf = right * a_mod + left * (1 - a_mod)
-        vector = self.get_vector_from_xy(pos)
-        return PixelValue(vf, vector)
+        return vf
 
-    def v_from_vector(self, vector):
+    cpdef v_from_vector(self, vector):
         """
         Gets pixel value identified by vector.
         :param vector:
@@ -147,10 +159,10 @@ class TextureMap:
         """
         raise NotImplementedError
 
-    def get_vector_from_xy(self, pos):
+    cpdef get_vector_from_xy(self, pos):
         raise NotImplementedError
 
-    def set_xy(self, pos, v):
+    cpdef set_xy(self, pos, v):
         x = int(pos[0])
         y = int(pos[1])
         if not 0 <= x < self.width:
@@ -159,13 +171,9 @@ class TextureMap:
         if not 0 <= y < self.height:
             raise ValueError('Height {} outside range 0 - {}'
                              .format(y, self.height))
-        if isinstance(v, PixelValue):
-            arr_v = v.value
-        else:
-            arr_v = v
-        self._arr[y][x] = arr_v
+        self._arr[y][x] = v
 
-    def write_png(self, out):
+    cpdef write_png(self, out):
         """
         Writes map as a png to the passed path
         :param out: path String
@@ -194,37 +202,30 @@ class TextureMap:
     def data_type(self):
         return self._arr.dtype
 
-    @property
-    def width(self):
-        return len(self._arr[0])
 
-    @property
-    def height(self):
-        return len(self._arr)
-
-
-class CubeMap(TextureMap):
+cdef class CubeMap(TextureMap):
     """
     A cube map is a more efficient way to store data about a sphere,
     that also involves less stretching than a LatLonMap
     """
 
+    cdef list tile_maps
+
     def __init__(self, **kwargs):
         self.tile_maps = []
         super().__init__(**kwargs)
 
-    def make_arr(self, width, height, data_type=np.uint8):
-        arr = super().make_arr(width, height, data_type)
+    cpdef make_arr(self, width, height, data_type=np.uint8):
+        arr = super(CubeMap, self).make_arr(width, height, data_type)
 
         # create tiles
         for i in range(6):
             tile = CubeSide(i, arr)
-            # todo: give tile map data
             self.tile_maps.append(tile)
 
         return arr
 
-    def v_from_lat_lon(self, pos):
+    cpdef v_from_lat_lon(self, pos):
         """
         Gets pixel value at passed latitude and longitude.
         :param pos: tuple(lat, lon)
@@ -235,7 +236,7 @@ class CubeMap(TextureMap):
         v = tile.v_from_lat_lon(pos)
         return v
 
-    def v_from_vector(self, vector):
+    cpdef v_from_vector(self, vector):
         """
         Gets pixel value at passed position on this map.
         :param vector: Vector (x, y, z)
@@ -245,7 +246,7 @@ class CubeMap(TextureMap):
         tile = self.tile_from_lat_lon(lat_lon)
         tile.v_from_vector(vector)
 
-    def v_from_xy(self, pos, tile=None):
+    cpdef v_from_xy(self, pos, tile=None):
         """
         Gets pixel value identified by vector.
         :param pos: map x, y
@@ -258,7 +259,7 @@ class CubeMap(TextureMap):
             x, y = pos
             return self._arr[y][x]
 
-    def get_tile(self, index):
+    cpdef get_tile(self, index):
         """
         gets the tile of the passed index
         :param index: int
@@ -266,7 +267,7 @@ class CubeMap(TextureMap):
         """
         return self.tile_maps[index]
 
-    def tile_from_lat_lon(self, pos):
+    cpdef tile_from_lat_lon(self, pos):
         """
         Gets the tile on which the passed lat, lon value is located.
         :param pos tuple(latitude, longitude)
@@ -292,7 +293,7 @@ class CubeMap(TextureMap):
         tile = self.tile_maps[tile_index]
         return tile
 
-    def tile_from_xy(self, pos):
+    cpdef tile_from_xy(self, pos):
         x, y = pos
         third_width = self.width / 3
         if not 0 <= x < self.width:
@@ -309,7 +310,7 @@ class CubeMap(TextureMap):
             i += 3
         return self.tile_maps[i]
 
-    def get_vector_from_xy(self, pos):
+    cpdef get_vector_from_xy(self, pos):
         tile = self.tile_from_xy(pos)
         # get relative position on tile from cube-map position
         tile_ref_pos = self.get_reference_position(tile.cube_face)
@@ -317,7 +318,7 @@ class CubeMap(TextureMap):
         vector = tile.get_vector_from_xy(rel_pos)
         return vector
 
-    def get_reference_position(self, tile_index):
+    cpdef get_reference_position(self, tile_index):
         if not 0 <= tile_index < 6:  # if outside valid range
             raise IndexError(tile_index)
         elif tile_index < 3:
@@ -338,10 +339,11 @@ class CubeMap(TextureMap):
         return height
 
 
-class LatLonMap(TextureMap):
+cdef class LatLonMap(TextureMap):
     """
     Stores a latitude-longitude texture map
     """
+
     def __init__(self, **kwargs):
         """
         Creates a LatLonMap either from a passed file path or
@@ -350,7 +352,7 @@ class LatLonMap(TextureMap):
         """
         super().__init__(**kwargs)
 
-    def v_from_lat_lon(self, pos):
+    cpdef v_from_lat_lon(self, pos):
         """
         Gets pixel value at passed latitude and longitude.
         :param pos: tuple(lat, lon)
@@ -359,9 +361,9 @@ class LatLonMap(TextureMap):
         xy_pos = self.lat_lon_to_xy(pos)
         vector = vector_from_lat_lon(pos)
         v = self.v_from_xy(xy_pos)
-        return PixelValue(v, vector)
+        return v
 
-    def v_from_vector(self, vector):
+    cpdef v_from_vector(self, vector):
         """
         Gets pixel value at passed position on this map.
         :param vector: Vector (x, y, z)
@@ -370,11 +372,11 @@ class LatLonMap(TextureMap):
         lat_lon = lat_lon_from_vector(vector)
         return self.v_from_lat_lon(lat_lon)
 
-    def get_vector_from_xy(self, pos):
+    cpdef get_vector_from_xy(self, pos):
         lat_lon = self.xy_to_lat_lon(pos)
         return vector_from_lat_lon(lat_lon)
 
-    def lat_lon_to_xy(self, lat_lon):
+    cpdef lat_lon_to_xy(self, lat_lon):
         lat, lon = lat_lon
         assert MIN_LON <= lon <= MAX_LON
         assert MIN_LAT <= lat <= MAX_LAT
@@ -398,7 +400,7 @@ class LatLonMap(TextureMap):
             y = 0
         return x, y
 
-    def xy_to_lat_lon(self, pos):
+    cpdef xy_to_lat_lon(self, pos):
         x, y = pos
         relative_x = x / self.width
         relative_y = y / self.height
@@ -407,10 +409,16 @@ class LatLonMap(TextureMap):
         return lat, lon
 
 
-class TileMap(TextureMap):
+cdef class TileMap(TextureMap):
     """
     Stores a square texture map that is mapped to a portion of a sphere.
     """
+
+    cdef:
+        tuple p1, p2
+        object parent
+        public short cube_face
+
     def __init__(self, p1, p2, cube_face, **kwargs):
         """
         Creates TileMap from upper left and lower right corner position
@@ -426,7 +434,7 @@ class TileMap(TextureMap):
         self.p2 = p2
         self.parent = None
 
-    def v_from_lat_lon(self, pos):
+    cpdef v_from_lat_lon(self, pos):
         """
         Gets pixel value at passed latitude and longitude.
         :param pos: tuple(lat, lon)
@@ -436,7 +444,7 @@ class TileMap(TextureMap):
         value = self.v_from_vector(vector)
         return value
 
-    def v_from_vector(self, vector):
+    cpdef v_from_vector(self, vector):
         """
         Gets pixel value at passed position on this map.
         :param vector: Vector (x, y, z)
@@ -464,7 +472,7 @@ class TileMap(TextureMap):
             raise IndexError(self.cube_face)
         self.v_from_xy((a, b))
 
-    def get_sub_tile(self, p1, p2):
+    cpdef get_sub_tile(self, p1, p2):
         """
         Gets sub-tile of this tile map
         :param p1: lower left corner
@@ -473,7 +481,7 @@ class TileMap(TextureMap):
         """
         # todo
 
-    def get_vector_from_xy(self, pos):
+    cpdef get_vector_from_xy(self, pos):
         a_index, b_index = pos
         if not 0 <= a_index <= self.width - 1:
             raise ValueError('Passed x {} was outside range 0-{}'
@@ -515,28 +523,22 @@ class TileMap(TextureMap):
         return vector
     
     
-class CubeSide(TileMap):
+cdef class CubeSide(TileMap):
     
     def __init__(self, cube_face, cube_arr):
         self.cube_face = cube_face
-        self._cube_arr = cube_arr
+        self._arr = cube_arr
         self.p1 = -1, -1
         self.p2 = 1, 1
         self.parent = None
-        
-    @property
-    def width(self):
-        w = len(self._cube_arr[0]) / 3
-        assert w % 1 == 0, w
-        return w
+
+        cube_map_shape = self._arr.shape
+        self.height = int(cube_map_shape[0] / 2)
+        self.width = int(cube_map_shape[1] / 3)
+        assert self.height == cube_map_shape[0] / 2
+        assert self.width == cube_map_shape[1] / 3
     
-    @property
-    def height(self):
-        h = len(self._cube_arr) / 2
-        assert h % 1 == 0, h
-        return h
-    
-    def v_from_xy(self, pos):
+    cpdef v_from_xy(self, pos):
         """
         Gets pixel value identified by vector.
         :param pos: map x, y position to access
@@ -558,20 +560,9 @@ class CubeSide(TileMap):
             return self.cube_face * self.width, 0
         elif self.cube_face < 6:
             return (self.cube_face - 3) * self.width, self.height
-        
-        
-class PixelValue:
-    def __init__(self, value, vector):
-        if isinstance(value, PixelValue):
-            v = value.value
-        else:
-            v = int(value)
-        assert isinstance(vector, Vector), vector
-        self.value = v
-        self.vector = vector
 
 
-def vector_from_lat_lon(pos):
+cpdef vector_from_lat_lon(pos):
     """
     Converts a lat lon position into a Vector
     :param pos: tuple(lat, lon)
@@ -589,7 +580,7 @@ def vector_from_lat_lon(pos):
     return Vector((x, y, z))
 
 
-def lat_lon_from_vector(vector):
+cpdef lat_lon_from_vector(vector):
     lat = atan2(vector.z, sqrt(pow(vector.x, 2) + pow(vector.y, 2)))
     lon = atan2(vector.y, vector.x)
     return lat, lon
