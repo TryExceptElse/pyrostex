@@ -9,7 +9,7 @@ import itertools as itr
 
 from mathutils import Vector
 
-from math import radians, cos, sin, tan, atan, sqrt, pow
+from math import radians, cos, sin, atan2, sqrt, pow
 
 MIN_LAT = radians(-90)
 MAX_LAT = radians(90)
@@ -37,15 +37,15 @@ class TextureMap:
                 "Only one of {'path', 'arr', 'prototype'} should be passed")
         if 'path' in kwargs:
             path = kwargs['path']
-            self._arr = np.load(path, allow_pickle=False)
+            self._arr = self.load_arr(path)
         elif 'arr' in kwargs:
-            self._arr = kwargs['arr']
+            self.set_arr(kwargs['arr'])
         # get data from prototype if one was passed
         elif 'prototype' in kwargs:
             p = kwargs.get('prototype')
             width = kwargs.get('width', p.width)
             height = kwargs.get('height', p.height)
-            self._arr = np.ndarray((height, width), p.data_type)
+            self._arr = self.make_arr(width, height, p.data_type)
             assert self.height == height
             assert self.width == width
             for x, y in itr.product(range(width), range(height)):
@@ -58,10 +58,20 @@ class TextureMap:
             width = kwargs.get('width', 2048 * 3)
             height = kwargs.get('height', 2048 * 2)
             data_type = kwargs.get('data_type', np.uint8)
-            self._arr = np.ndarray((width, height), data_type)
+            self._arr = self.make_arr(width, height, data_type)
+
+    def load_arr(self, path):
+        return np.load(path, allow_pickle=False)
 
     def save(self, path):
         np.save(path, self._arr, allow_pickle=False)
+
+    def make_arr(self, width, height, data_type=np.uint8):
+        arr = np.ndarray((height, width), data_type)
+        return arr
+
+    def set_arr(self, arr):
+        self._arr = arr
 
     def v_from_lat_lon(self, pos):
         """
@@ -194,16 +204,25 @@ class TextureMap:
 
 
 class CubeMap(TextureMap):
+    """
+    A cube map is a more efficient way to store data about a sphere,
+    that also involves less stretching than a LatLonMap
+    """
 
     def __init__(self, **kwargs):
-        # create tiles
         self.tile_maps = []
+        super().__init__(**kwargs)
+
+    def make_arr(self, width, height, data_type=np.uint8):
+        arr = super().make_arr(width, height, data_type)
+
+        # create tiles
         for i in range(6):
-            tile = TileMap((-1, -1), (1, 1), i)
+            tile = CubeSide(i, arr)
             # todo: give tile map data
             self.tile_maps.append(tile)
 
-        super().__init__(**kwargs)
+        return arr
 
     def v_from_lat_lon(self, pos):
         """
@@ -292,7 +311,10 @@ class CubeMap(TextureMap):
 
     def get_vector_from_xy(self, pos):
         tile = self.tile_from_xy(pos)
-        vector = tile.get_vector_from_xy(pos)
+        # get relative position on tile from cube-map position
+        tile_ref_pos = self.get_reference_position(tile.cube_face)
+        rel_pos = (pos[0] - tile_ref_pos[0], pos[1] - tile_ref_pos[1])
+        vector = tile.get_vector_from_xy(rel_pos)
         return vector
 
     def get_reference_position(self, tile_index):
@@ -302,14 +324,6 @@ class CubeMap(TextureMap):
             return tile_index * self.tile_width, 0
         elif tile_index < 6:
             return (tile_index - 3) * self.tile_width, self.tile_height
-
-    @property
-    def width(self):
-        return len(self._arr[0])
-
-    @property
-    def height(self):
-        return len(self._arr)
 
     @property
     def tile_width(self):
@@ -450,17 +464,6 @@ class TileMap(TextureMap):
             raise IndexError(self.cube_face)
         self.v_from_xy((a, b))
 
-    def v_from_xy(self, pos):
-        """
-        Gets pixel value identified by vector.
-        :param pos: map x, y position to access
-        :return: PixelValue
-        """
-
-        vector = self.get_vector_from_xy(pos)
-        pixel_value = PixelValue(self.value_from_pos(pos), vector)
-        return pixel_value
-
     def get_sub_tile(self, p1, p2):
         """
         Gets sub-tile of this tile map
@@ -472,6 +475,12 @@ class TileMap(TextureMap):
 
     def get_vector_from_xy(self, pos):
         a_index, b_index = pos
+        if not 0 <= a_index <= self.width - 1:
+            raise ValueError('Passed x {} was outside range 0-{}'
+                             .format(a_index, self.width))
+        if not 0 <= b_index <= self.height - 1:
+            raise ValueError('Passed x {} was outside range 0-{}'
+                             .format(b_index, self.height))
         min_rel_x, min_rel_y = self.p1
         max_rel_x, max_rel_y = self.p2
         # flip values if needed
@@ -504,8 +513,53 @@ class TileMap(TextureMap):
             raise ValueError('Invalid face index: {}'.format(self.cube_face))
         assert vector.magnitude < 1.9, vector.magnitude
         return vector
+    
+    
+class CubeSide(TileMap):
+    
+    def __init__(self, cube_face, cube_arr):
+        self.cube_face = cube_face
+        self._cube_arr = cube_arr
+        self.p1 = -1, -1
+        self.p2 = 1, 1
+        self.parent = None
+        
+    @property
+    def width(self):
+        w = len(self._cube_arr[0]) / 3
+        assert w % 1 == 0, w
+        return w
+    
+    @property
+    def height(self):
+        h = len(self._cube_arr) / 2
+        assert h % 1 == 0, h
+        return h
+    
+    def v_from_xy(self, pos):
+        """
+        Gets pixel value identified by vector.
+        :param pos: map x, y position to access
+        :return: PixelValue
+        """
+        x, y = pos
+        # modify x and y to be relative to the reference point
+        # for this cube side
+        x_ref, y_ref = self.reference_position
+        x += x_ref
+        y += y_ref
+        return super().v_from_xy((x, y))
 
-
+    @property
+    def reference_position(self):
+        if not 0 <= self.cube_face < 6:  # if outside valid range
+            raise IndexError(self.cube_face)
+        elif self.cube_face < 3:
+            return self.cube_face * self.width, 0
+        elif self.cube_face < 6:
+            return (self.cube_face - 3) * self.width, self.height
+        
+        
 class PixelValue:
     def __init__(self, value, vector):
         if isinstance(value, PixelValue):
@@ -536,6 +590,6 @@ def vector_from_lat_lon(pos):
 
 
 def lat_lon_from_vector(vector):
-    lat = atan(vector.z / sqrt(pow(vector.x, 2) + pow(vector.y, 2)))
-    lon = atan(vector.y / vector.x)
+    lat = atan2(vector.z, sqrt(pow(vector.x, 2) + pow(vector.y, 2)))
+    lon = atan2(vector.y, vector.x)
     return lat, lon

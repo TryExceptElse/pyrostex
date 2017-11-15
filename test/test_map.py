@@ -4,12 +4,42 @@ import os
 
 from math import radians
 
-from pyrostex.map import LatLonMap
-from settings import ROOT_PATH
+from pyrostex.map import LatLonMap, CubeMap
 
 
-class TestCubeMap:
-    pass
+class TestCubeMap(TestCase):
+    def test_cube_is_instantiated_with_correct_width(self):
+        m = CubeMap(width=1536, height=1024)
+        self.assertEqual(1536, m.width)
+
+    def test_cube_is_instantiated_with_correct_height(self):
+        m = CubeMap(width=1536, height=1024)
+        self.assertEqual(1024, m.height)
+
+    def test_make_arr_creates_correct_height(self):
+        m = CubeMap(width=1536, height=1024)
+        arr = m.make_arr(1536, 1024)
+        self.assertEqual(1024, len(arr))
+
+    def test_make_arr_creates_correct_width(self):
+        m = CubeMap(width=1536, height=1024)
+        arr = m.make_arr(1536, 1024)
+        self.assertEqual(1536, len(arr[0]))
+
+    def test_tile_from_xy_returns_correctly1(self):
+        m = CubeMap(width=1536, height=1024)
+        i = m.tile_from_xy((512, 0))
+        self.assertEqual(1, i.cube_face)
+
+    def test_tile_from_xy_returns_correctly3(self):
+        m = CubeMap(width=1536, height=1024)
+        i = m.tile_from_xy((0, 512))
+        self.assertEqual(3, i.cube_face)
+
+    def test_tile_from_xy_returns_correctly5(self):
+        m = CubeMap(width=1536, height=1024)
+        i = m.tile_from_xy((1535, 1023))
+        self.assertEqual(5, i.cube_face)
 
 
 class TestLatLonMap(TestCase):
