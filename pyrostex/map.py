@@ -446,14 +446,14 @@ class TileMap(TextureMap):
             a = vector.y / vector.x
             b = vector.z / vector.x
         elif self.cube_face == 1:
-            a = vector.x / vector.y
-            b = vector.z / vector.y
+            a = vector.x / -vector.y
+            b = vector.z / -vector.y
         elif self.cube_face == 2:
             a = vector.y / vector.x
             b = vector.z / -vector.x
         elif self.cube_face == 3:
-            a = vector.y / vector.x
-            b = vector.z / -vector.y
+            a = vector.x / vector.y
+            b = vector.z / vector.y
         elif self.cube_face == 4:
             a = vector.x / vector.z
             b = vector.y / vector.z
@@ -500,11 +500,11 @@ class TileMap(TextureMap):
         if self.cube_face == 0:
             vector = Vector((1, a, b))
         elif self.cube_face == 1:
-            vector = Vector((a, 1, b))
+            vector = Vector((a, -1, b))
         elif self.cube_face == 2:
             vector = Vector((-1, -a, b))
         elif self.cube_face == 3:
-            vector = Vector((-a, -1, b))
+            vector = Vector((-a, 1, b))
         elif self.cube_face == 4:
             vector = Vector((a, b, 1))
         elif self.cube_face == 5:

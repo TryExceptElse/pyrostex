@@ -1,9 +1,9 @@
 from unittest import TestCase
 
-import os
-
 from math import radians
+from mathutils import Vector
 
+from pyrostex import map
 from pyrostex.map import LatLonMap, CubeMap
 
 
@@ -54,3 +54,36 @@ class TestLatLonMap(TestCase):
         x, y = m.lat_lon_to_xy((radians(-90), radians(-180)))
         self.assertEqual(0, y)
         self.assertEqual(0, x)
+
+
+class TestFunctions(TestCase):
+    def test_meridian_vector_has_correct_lat_lon_conversion(self):
+        vector = Vector((1, 0, 0))
+        lat, lon = map.lat_lon_from_vector(vector)
+        self.assertEqual(0, lat)
+        self.assertEqual(0, lon)
+
+    def test_45_lon_vector_has_correct_lat_lon_conversion(self):
+        vector = Vector((1, 1, 0))
+        lat, lon = map.lat_lon_from_vector(vector)
+        self.assertEqual(0, lat)
+        self.assertEqual(radians(45), lon)
+
+    def test_90_lon_vector_has_correct_lat_lon_conversion(self):
+        vector = Vector((0, -1, 0))
+        lat, lon = map.lat_lon_from_vector(vector)
+        self.assertEqual(0, lat)
+        self.assertEqual(radians(-90), lon)
+
+    def test_latitude_has_correct_conversion(self):
+        vector = Vector((1, 0, 1))
+        lat, lon = map.lat_lon_from_vector(vector)
+        self.assertEqual(radians(45), lat)
+
+    def test_longitude_converts_to_vector_correctly(self):
+        vector = map.vector_from_lat_lon((0, radians(45)))
+        self.assertEqual(vector.x, vector.y)
+
+    def test_latitude_converts_to_vector_correctly(self):
+        vector = map.vector_from_lat_lon((radians(45), 0))
+        self.assertEqual(vector.x, vector.z)
