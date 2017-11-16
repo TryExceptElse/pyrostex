@@ -9,6 +9,7 @@ import png
 import itertools as itr
 
 cimport numpy as np
+cimport cython
 
 
 from mathutils import Vector
@@ -390,7 +391,8 @@ cdef class CubeMap(TextureMap):
         rel_pos[0] = pos[0] - tile_ref_pos[0]
         rel_pos[1] = pos[1] - tile_ref_pos[1]
         self.vector_from_tile_xy_(vector, tile_index, rel_pos)
-        
+
+    @cython.cdivision(True)
     cdef void vector_from_tile_xy_(
             self, 
             double[3] vector, 
@@ -604,6 +606,44 @@ cdef class TileMap(TextureMap):
         elif self.cube_face == 5:
             a = vector.x / -vector.z
             b = vector.y / -vector.z
+        else:
+            raise IndexError(self.cube_face)
+        self.v_from_xy((a, b))
+
+    @cython.cdivision(True)
+    cdef int v_from_vector_(self, double[3] vector):
+        """
+        Gets value associated with passed vector.
+        Unlike above version, vector is a memoryview, not an object.
+        """
+        cdef double x, y, z
+        x = vector[0]
+        y = vector[1]
+        z = vector[2]
+        if x == 0.:
+            raise ValueError('Passed vector had an x value of 0')
+        if y == 0.:
+            raise ValueError('Passed vector had an y value of 0')
+        if z == 0.:
+            raise ValueError('Passed vector had an z value of 0')
+        if self.cube_face == 0:
+            a = y / x
+            b = z / x
+        elif self.cube_face == 1:
+            a = x / -y
+            b = z / -y
+        elif self.cube_face == 2:
+            a = y / x
+            b = z / -x
+        elif self.cube_face == 3:
+            a = x / y
+            b = z / y
+        elif self.cube_face == 4:
+            a = x / z
+            b = y / z
+        elif self.cube_face == 5:
+            a = x / -z
+            b = y / -z
         else:
             raise IndexError(self.cube_face)
         self.v_from_xy((a, b))
