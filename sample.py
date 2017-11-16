@@ -6,6 +6,7 @@ from settings import ROOT_PATH
 
 def make_sample_spheroid():
     spheroid_dir = ROOT_PATH + '/test/resources/out/test_spheroid'
+    print('creating spheroid')
     spheroid = Spheroid(
         124,
         'rock',
@@ -16,6 +17,7 @@ def make_sample_spheroid():
         0.1,
         dir_path=spheroid_dir
     )
+    print('created spheroid')
     spheroid.write_debug_png()
 
 

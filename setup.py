@@ -7,6 +7,6 @@ setup(
     ext_modules=cythonize(Extension(
         name='pyrostex.map',
         sources=['pyrostex/map.pyx'],
-        extra_compile_args=["-ffast-math", "-Ofast"]
+        extra_compile_args=["-ffast-math", "-Og"]
     )),
 )
