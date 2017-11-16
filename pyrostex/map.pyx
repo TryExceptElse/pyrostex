@@ -32,10 +32,6 @@ cdef class TextureMap:
     Abstract map
     """
 
-    cdef:
-        np.ndarray _arr
-        public int width, height
-
     def __init__(self, **kwargs):
         """
         Creates a LatLonMap either from a passed file path or
@@ -65,15 +61,14 @@ cdef class TextureMap:
         assert self.width, self.width
         assert self.height, self.height
 
-    cpdef np.ndarray load_arr(self, str path):
+    cpdef np.ndarray load_arr(self, unicode path):
         return np.load(path, allow_pickle=False)
 
-    cpdef void save(self, str path):
+    cpdef void save(self, unicode path):
         np.save(path, self._arr, allow_pickle=False)
 
     cpdef np.ndarray make_arr(self, width, height, data_type=np.uint8):
-        arr = np.ndarray((height, width), data_type)
-        return arr
+        return np.ndarray((height, width), data_type or np.uint8)
 
     cpdef void set_arr(self, arr):
         self._arr = arr
@@ -110,6 +105,9 @@ cdef class TextureMap:
         :param pos: tuple(lat, lon)
         :return: pos
         """
+        raise NotImplementedError
+
+    cdef int v_from_lat_lon_(self, double[2] pos):
         raise NotImplementedError
 
     cpdef int v_from_xy(self, pos):
@@ -256,9 +254,6 @@ cdef class CubeMap(TextureMap):
     A cube map is a more efficient way to store data about a sphere,
     that also involves less stretching than a LatLonMap
     """
-
-    cdef list tile_maps
-    cdef public int tile_width, tile_height
 
     def __init__(self, **kwargs):
         self.tile_maps = []
@@ -559,11 +554,6 @@ cdef class TileMap(TextureMap):
     """
     Stores a square texture map that is mapped to a portion of a sphere.
     """
-
-    cdef:
-        tuple p1, p2
-        object parent
-        public short cube_face
 
     def __init__(self, p1, p2, cube_face, **kwargs):
         """
