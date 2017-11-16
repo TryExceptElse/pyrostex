@@ -145,14 +145,14 @@ cdef class TextureMap:
         b_mod = b % 1
         if a_mod == 0.:
             a0 = int(a)
-            a1 = None
+            a1 = -1
         else:
             a0 = int(a)
             a1 = int(a) + 1
             # assert a1 < self.width
         if b_mod == 0.:
             b0 = int(b)
-            b1 = None
+            b1 = -1
         else:
             b0 = int(b)
             b1 = int(b) + 1
@@ -160,16 +160,16 @@ cdef class TextureMap:
         # assert a0 < self.width
         # assert b0 < self.height
 
-        if b1 is None and a1 is None:
+        if b1 == -1 and a1 == -1:
             # if both passed values are whole numbers, just get the
             # corresponding value
             vf = int(self._arr[b0][a0])  # may store shorts, uint16, etc
-        elif a1 is None and b1:
+        elif a1 == -1 and b1:
             # if only one column
             v0 = self._arr[b1][a0]
             v1 = self._arr[b0][a0]
             vf = int(v1 * b_mod + v0 * (1 - b_mod))
-        elif b1 is None and a1:
+        elif b1 == -1 and a1:
             # if only one row
             v0 = self._arr[b0][a0]
             v1 = self._arr[b0][a1]
