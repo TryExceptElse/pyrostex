@@ -5,6 +5,8 @@ import numpy as np
 import settings
 
 from .map import LatLonMap, CubeMap
+from .height import HeightCubeMap as HCubeMap
+from .temp import make_warming_map
 
 TN_PATH = os.path.join(settings.ROOT_PATH, 'pyrostex')
 TN_RESOURCE_PATH = os.path.join(TN_PATH, 'resources')
@@ -21,6 +23,8 @@ MIN_HEIGHT_MAP_EL = -1.2e7
 MAX_HEIGHT_MAP_EL = 1.2e7
 HEIGHT_MAP_RANGE = MAX_HEIGHT_MAP_EL - MIN_HEIGHT_MAP_EL
 
+WARMING_MAP_NAME = 'warming.npy'
+
 
 class Spheroid:
     """
@@ -36,6 +40,7 @@ class Spheroid:
             radius,
             surface_gravities,
             surface_atmospheres=0,
+            atm_warming=0,
             axial_tilt=0.05,
             albedo=0.3,
             tidal_locked=False,
@@ -50,21 +55,24 @@ class Spheroid:
         self.radius = radius
         self.surface_gravities = surface_gravities
         self.surface_pressure = surface_atmospheres
+        self.atm_warming = atm_warming
         self.axial_tile = axial_tilt
         self.albedo = albedo
         self.tidal_locked = tidal_locked
         self._dir_path = dir_path
+
+        # maps
+        self.height_map = None
+        self.warming_map = None
+        self.temp_map = None
+        self.wind_map = None
 
         # check dir exists
         if not os.path.exists(self.dir_path):
             os.mkdir(self.dir_path)
 
         # generate highest level maps
-        self.make_base_height_map()
-        self.make_height_arr()
-        self.height_map = self.make_height_cube_map()
-        self.temp_map = self.make_temp_map()
-        self.tex_map = self.make_tex_map()
+        self.build()
 
     @property
     def uid(self):
@@ -80,8 +88,10 @@ class Spheroid:
         ).strip('.')  # remove any '.'
 
     def build(self):
-        self.make_dir()
-        self.make_base_height_map()
+        self.height_map = self.make_height_cube_map()
+        self.warming_map = self.make_warming_map()
+        self.temp_map = self.make_temp_map()
+        self.tex_map = self.make_tex_map()
 
     def make_dir(self):
         """
@@ -107,7 +117,7 @@ class Spheroid:
         def scale(v):
             assert v > MIN_HEIGHT_MAP_EL, v
             assert v < MAX_HEIGHT_MAP_EL, v
-            return int(v / -HEIGHT_MAP_RANGE * 65536) + 32768  # 2^16 & 2^16/2
+            return int(v / -HEIGHT_MAP_RANGE * 65535) + 32767  # 2^16 & 2^16/2
 
         for y, row in enumerate(height_field.filled_rows):
             arr[y] = [scale(v) for v in row]
@@ -150,10 +160,27 @@ class Spheroid:
         Creates cube map from lat-lon map
         :return: None
         """
+        self.make_base_height_map()
+        self.make_height_arr()
         height_map_path = os.path.join(self.dir_path, HEIGHT_MAP_NAME)
         lat_lon_map = LatLonMap(path=height_map_path)  # load from file
-        cube_map = CubeMap(prototype=lat_lon_map, height=1024, width=1536)
+        cube_map = HCubeMap(prototype=lat_lon_map, height=1024, width=1536)
         return cube_map
+
+    def make_warming_map(self):
+        """
+        Creates a map that stores information about warming areas of
+        the planet surface.
+        :return: TMap
+        """
+        return make_warming_map(
+            height_map=self.height_map,
+            rel_res=0.5,  # relative resolution
+            mean_temp=self.mean_temp,
+            base_atm=self.surface_pressure,
+            atm_warming=self.atm_warming,
+            base_gravity=self.surface_gravities,
+            radius=self.radius)
 
     def make_temp_map(self):
         """
@@ -173,7 +200,9 @@ class Spheroid:
         Writes maps to png files for debug purposes
         :return:
         """
-        self.height_map.write_png(os.path.join(self.dir_path, 'height_cube.png'))
+        self.height_map.write_png(os.path.join(
+            self.dir_path, 'height_cube.png'))
+        self.warming_map.write_png(os.path.join(self.dir_path, 'warming.png'))
         # todo: temp + others
 
     @property

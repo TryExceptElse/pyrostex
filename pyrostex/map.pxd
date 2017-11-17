@@ -8,20 +8,27 @@ cdef class TextureMap:
     cdef:
         np.ndarray _arr
         public int width, height
+        public int max_value
 
     cdef void clone(self, TextureMap p, int width, int height)
     cpdef np.ndarray make_arr(self, width, height, data_type=?)
     cpdef np.ndarray load_arr(self, unicode path)
     cpdef void save(self, unicode path)
     cpdef void set_arr(self, arr)
+
     cpdef int v_from_lat_lon(self, pos)
     cdef int v_from_lat_lon_(self, double[2] pos)
     cpdef int v_from_xy(self, pos)
     cdef int v_from_xy_(self, double[2] pos)
+    cpdef int v_from_rel_xy(self, tuple pos)
+    cdef int v_from_rel_xy_(self, double[2] pos)
     cpdef int v_from_vector(self, vector)
     cdef int v_from_vector_(self, double[3] vector)
-    cpdef get_vector_from_xy(self, pos)
+
+    cpdef vector_from_xy(self, pos)
     cdef void vector_from_xy_(self, double[3] vector, double[2] pos)
+    cpdef lat_lon_from_xy(self, tuple pos)
+    cdef lat_lon_from_xy_(self, double[2] lat_lon, double[2] xy_pos)
     cpdef void set_xy(self, pos, int v)
     cdef void set_xy_(self, int[2] pos, int v)
     cpdef write_png(self, out)
@@ -75,3 +82,8 @@ cdef class TileMap(TextureMap):
 
 cdef class CubeSide(TileMap):
     pass
+
+
+cpdef vector_from_lat_lon(pos)
+cpdef lat_lon_from_vector(vector)
+cdef lat_lon_from_vector_(double[2] lat_lon, double[3] vector)

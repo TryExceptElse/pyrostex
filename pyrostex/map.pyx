@@ -56,6 +56,7 @@ cdef class TextureMap:
         else:
             width = kwargs.get('width', 2048 * 3)
             height = kwargs.get('height', 2048 * 2)
+
             data_type = kwargs.get('data_type', np.uint8)
             self.set_arr(self.make_arr(width, height, data_type))
 
@@ -74,6 +75,12 @@ cdef class TextureMap:
     cpdef void set_arr(self, arr):
         self._arr = arr
         self.height, self.width = arr.shape
+        if arr.dtype == np.uint8:
+            self.max_value = 255
+        elif arr.dtype == np.uint16:
+            self.max_value = 65535
+        else:
+            raise ValueError
 
     cdef void clone(self, TextureMap p, int width, int height):
         """
@@ -184,6 +191,18 @@ cdef class TextureMap:
             vf = int(right * a_mod + left * (1 - a_mod))
         return vf
 
+    cpdef int v_from_rel_xy(self, tuple pos):
+        cdef double[2] pos_
+        pos_[0] = pos[0]
+        pos_[1] = pos[1]
+        return self.v_from_rel_xy_(pos_)
+
+    cdef int v_from_rel_xy_(self, double[2] pos):
+        cdef double[2] abs_pos
+        abs_pos[0] = pos[0] * self.width
+        abs_pos[1] = pos[1] * self.height
+        return self.v_from_xy_(abs_pos)
+
     cpdef int v_from_vector(self, vector):
         """
         Gets pixel value identified by vector.
@@ -195,7 +214,7 @@ cdef class TextureMap:
     cdef int v_from_vector_(self, double[3] vector):
         raise NotImplementedError
 
-    cpdef get_vector_from_xy(self, pos):
+    cpdef vector_from_xy(self, pos):
         raise NotImplementedError
 
     cdef void vector_from_xy_(self, double[3] vector, double[2] pos):
@@ -204,6 +223,20 @@ cdef class TextureMap:
         associated position
         """
         raise NotImplementedError
+
+    cpdef lat_lon_from_xy(self, tuple pos):
+        cdef double[2] lat_lon
+        cdef double[2] xy_pos
+        xy_pos[0] = pos[0]
+        xy_pos[1] = pos[1]
+        self.lat_lon_from_xy_(lat_lon, xy_pos)
+        return lat_lon
+
+    cdef lat_lon_from_xy_(self, double[2] lat_lon, double[2] xy_pos):
+        cdef double[3] vector
+        self.vector_from_xy_(vector, xy_pos)
+        lat_lon_from_vector_(lat_lon, vector)
+        # does not return a value, instead stores result in lat_lon.
 
     cpdef void set_xy(self, pos, int v):
         cdef int x, y
@@ -375,7 +408,7 @@ cdef class CubeMap(TextureMap):
             i += 3
         return i
 
-    cpdef get_vector_from_xy(self, pos):
+    cpdef vector_from_xy(self, pos):
         tile = self.tile_from_xy(pos)
         # get relative position on tile from cube-map position
         tile_ref_pos = self.get_reference_position(tile.cube_face)
@@ -502,7 +535,7 @@ cdef class LatLonMap(TextureMap):
         lat_lon_from_vector_(lat_lon, vector)
         return self.v_from_lat_lon_(lat_lon)
 
-    cpdef get_vector_from_xy(self, pos):
+    cpdef vector_from_xy(self, pos):
         lat_lon = self.xy_to_lat_lon(pos)
         return vector_from_lat_lon(lat_lon)
 
@@ -588,27 +621,11 @@ cdef class TileMap(TextureMap):
         :param vector: Vector (x, y, z)
         :return: PixelValue
         """
-        if self.cube_face == 0:
-            a = vector.y / vector.x
-            b = vector.z / vector.x
-        elif self.cube_face == 1:
-            a = vector.x / -vector.y
-            b = vector.z / -vector.y
-        elif self.cube_face == 2:
-            a = vector.y / vector.x
-            b = vector.z / -vector.x
-        elif self.cube_face == 3:
-            a = vector.x / vector.y
-            b = vector.z / vector.y
-        elif self.cube_face == 4:
-            a = vector.x / vector.z
-            b = vector.y / vector.z
-        elif self.cube_face == 5:
-            a = vector.x / -vector.z
-            b = vector.y / -vector.z
-        else:
-            raise IndexError(self.cube_face)
-        self.v_from_xy((a, b))
+        cdef double[3] vector_
+        vector_[0] = vector.x
+        vector_[1] = vector.y
+        vector_[2] = vector.z
+        return self.v_from_vector_(vector_)
 
     @cython.cdivision(True)
     cdef int v_from_vector_(self, double[3] vector):
@@ -617,6 +634,7 @@ cdef class TileMap(TextureMap):
         Unlike above version, vector is a memoryview, not an object.
         """
         cdef double x, y, z
+        cdef double[2] pos
         x = vector[0]
         y = vector[1]
         z = vector[2]
@@ -646,7 +664,9 @@ cdef class TileMap(TextureMap):
             b = y / -z
         else:
             raise IndexError(self.cube_face)
-        self.v_from_xy((a, b))
+        pos[0] = a
+        pos[1] = b
+        return self.v_from_xy_(pos)
 
     cpdef get_sub_tile(self, p1, p2):
         """
@@ -657,7 +677,7 @@ cdef class TileMap(TextureMap):
         """
         # todo
 
-    cpdef get_vector_from_xy(self, pos):
+    cpdef vector_from_xy(self, pos):
         cdef double[3] vector
         cdef double[2] pos_
         vector = np.ndarray((3), np.double)
