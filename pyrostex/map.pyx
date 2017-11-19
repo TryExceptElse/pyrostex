@@ -306,12 +306,15 @@ cdef class TextureMap:
     cdef void set_xy_(self, int[2] pos, int v):
         self._arr[pos[1]][pos[0]] = v
 
+    @cython.cdivision(True)
+    @cython.wraparound(False)
     cpdef void write_png(self, out):
         """
         Writes map as a png to the passed path
         :param out: path String
         :return: None
         """
+        cdef np.ndarray out_arr, row
         if '.' not in out:
             out += '.png'
         assert isinstance(self._arr, np.ndarray)
@@ -319,8 +322,10 @@ cdef class TextureMap:
             out_arr = self._arr
         elif self._arr.dtype == np.uint16:
             out_arr = np.empty_like(self._arr, np.uint8)
-            for y, row in enumerate(self._arr):
-                for x, v in enumerate(row):
+            for y in range(self.height):
+                row = self._arr[y]
+                for x in range(self.width):
+                    v = row[x]
                     out_arr[y][x] = v / 256
         else:
             raise TypeError(

@@ -13,6 +13,7 @@ import png
 import numpy as np
 
 cimport numpy as np
+cimport cython
 
 # imports from within project
 from .map cimport CubeMap, lat_lon_from_vector_
@@ -70,6 +71,8 @@ cdef class TMap(CubeMap):
         stored_v = stored_v_from_t(t)
         self.set_xy_(pos, stored_v)
 
+    @cython.cdivision(True)
+    @cython.wraparound(False)
     cpdef void write_png(self, out):
         """
         Writes map as a png to the passed path.
@@ -78,7 +81,7 @@ cdef class TMap(CubeMap):
         """
         cdef int max = 64
         cdef int x, y, v
-        cdef np.ndarray row
+        cdef np.ndarray row, out_arr
         if '.' not in out:
             out += '.png'  # adjust out path
         while True:
@@ -88,8 +91,10 @@ cdef class TMap(CubeMap):
             # of a planet.
             restart = False  # reset flag
             out_arr = np.empty_like(self._arr, np.uint8)
-            for y, row in enumerate(self._arr):
-                for x, v in enumerate(row):
+            for y in range(self.height):
+                row = self._arr[y]
+                for x in range(self.width):
+                    v = row[x]
                     if v > max:
                         # increase max
                         max = 2 ** int(ceil(log2(v)))
@@ -175,6 +180,7 @@ cdef inline float find_pressure(float h, float pb, float tb, float g):
     return pb * exp((-g * ATM_M * h) / (R * tb))
 
 
+@cython.cdivision(True)
 cdef inline float find_cs_ratio(double lat):
     """
     Finds relative cross section compared to mean latitude (30 deg)
@@ -183,6 +189,7 @@ cdef inline float find_cs_ratio(double lat):
     return cos(lat) / MEAN_CS  # get ratio relative to average cs
 
 
+@cython.cdivision(True)
 cdef inline float t_from_stored_v(int stored_v):
     return float(stored_v) / CONVERSION_RATIO
 
