@@ -4,10 +4,10 @@
 Handles generation of temperature map from height map
 """
 
-include "macro.pxi"
+include "macro.pxi"  # include convenience inline functions
 
 # imports from packages
-from libc.math cimport exp, cos, log2
+from libc.math cimport exp, cos, log2, ceil
 
 import png
 import numpy as np
@@ -76,7 +76,9 @@ cdef class TMap(CubeMap):
         :param out: path String
         :return: None
         """
-        max = 64
+        cdef int max = 64
+        cdef int x, y, v
+        cdef np.ndarray row
         if '.' not in out:
             out += '.png'  # adjust out path
         while True:
@@ -84,18 +86,21 @@ cdef class TMap(CubeMap):
             # start over and increase max.
             # this lets us see a map that is scaled to fit the t range
             # of a planet.
-
+            restart = False  # reset flag
             out_arr = np.empty_like(self._arr, np.uint8)
             for y, row in enumerate(self._arr):
                 for x, v in enumerate(row):
                     if v > max:
                         # increase max
-                        # max *= int(log2(v / max)) + 1
-                        while max < v:
-                            max *= 2
-                        continue  # restart
-                    out_arr[y][x] = int(v * 255 / max)
-            break  # if array was successfully finished
+                        max = 2 ** int(ceil(log2(v)))
+                        # awkwardly use flag to break nested loop
+                        restart = True
+                        break
+                    out_arr[y][x] = v * 255 / max
+                if restart:
+                    break
+            if not restart:
+                break
 
         with open(out, 'wb') as f:
             height = len(out_arr)
