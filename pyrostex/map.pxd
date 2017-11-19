@@ -25,13 +25,22 @@ cdef class TextureMap:
     cpdef int v_from_vector(self, vector)
     cdef int v_from_vector_(self, double[3] vector)
 
-    cpdef vector_from_xy(self, pos)
+    cpdef object gradient_from_xy(self, tuple[double] pos)
+    cdef void gradient_from_xy_(self, double[2] gr, double[2] pos)
+    cdef inline void _gr_sample_pos(
+            self,
+            double[2] p0,
+            double[2] p1,
+            double[2] p2,
+            double[2] p3,
+            double[2] origin)
+    cpdef object vector_from_xy(self, pos)
     cdef void vector_from_xy_(self, double[3] vector, double[2] pos)
-    cpdef lat_lon_from_xy(self, tuple pos)
-    cdef lat_lon_from_xy_(self, double[2] lat_lon, double[2] xy_pos)
+    cpdef tuple lat_lon_from_xy(self, tuple pos)
+    cdef void lat_lon_from_xy_(self, double[2] lat_lon, double[2] xy_pos)
     cpdef void set_xy(self, pos, int v)
     cdef void set_xy_(self, int[2] pos, int v)
-    cpdef write_png(self, out)
+    cpdef void write_png(self, out)
 
 
 cdef class CubeMap(TextureMap):

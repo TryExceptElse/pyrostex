@@ -5,3 +5,4 @@
 # ignore compiled cython
 pyrostex/*.c  # cython c files
 pyrostex/*.so  # compiled c
+pytostex/*.html  # cython performance readouts

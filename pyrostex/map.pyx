@@ -4,6 +4,8 @@
 Maps for storing data about a map for a sphere.
 """
 
+include "macro.pxi"
+
 import numpy as np
 import png
 import itertools as itr
@@ -125,8 +127,13 @@ cdef class TextureMap:
         :return:
         """
         cdef double[2] pos_
-        pos_[0] = pos[0]
-        pos_[1] = pos[1]
+        cp2a_2d(pos, pos_)
+        if not 0 <= pos_[0] < self.width:
+            raise ValueError('x value: {} was greater than width: {}'
+                             .format(pos_[0], self.width))
+        if not 0 <= pos_[1] < self.height:
+            raise ValueError('y value: {} was greater than height: {}'
+                             .format(pos_[1], self.height))
         return self.v_from_xy_(pos_)
 
     cdef int v_from_xy_(self, double[2] pos):
@@ -193,8 +200,7 @@ cdef class TextureMap:
 
     cpdef int v_from_rel_xy(self, tuple pos):
         cdef double[2] pos_
-        pos_[0] = pos[0]
-        pos_[1] = pos[1]
+        cp2a_2d(pos, pos_)
         return self.v_from_rel_xy_(pos_)
 
     cdef int v_from_rel_xy_(self, double[2] pos):
@@ -214,6 +220,54 @@ cdef class TextureMap:
     cdef int v_from_vector_(self, double[3] vector):
         raise NotImplementedError
 
+    cpdef object gradient_from_xy(self, tuple[double] pos):
+        cdef double[2] gr
+        cdef double[2] pos_
+        cp2a_2d(pos, pos_)
+        self.gradient_from_xy_(gr, pos_)
+        return Vector((gr[0], gr[1]))
+
+    cdef void gradient_from_xy_(self, double[2] gr, double[2] pos):
+        cdef double[2] p0, p1, p2, p3
+        cdef int v0, v1, v2, v3
+        self._gr_sample_pos(p0, p1, p2, p3, pos)
+        v0 = self.v_from_xy_(p0)
+        v1 = self.v_from_xy_(p1)
+        v2 = self.v_from_xy_(p2)
+        v3 = self.v_from_xy_(p3)
+        # find gradient
+        gr[0] = float((v0 + v3) - (v1 + v2)) / 2  # x value of gradient vector
+        gr[1] = float((v0 + v1) - (v2 + v3)) / 2  # y value of gradient vector
+        # Does not return anything, result is stored in passed gr arr.
+
+    cdef inline void _gr_sample_pos(
+            self,
+            double[2] p0,
+            double[2] p1,
+            double[2] p2,
+            double[2] p3,
+            double[2] origin):
+        """
+        Finds positions to sample in order to find the gradient at the
+        passed origin point.
+        origin is the position sampled, p0 upper right,
+        p1 is upper left, p2 is lower left, and p3 is lower right.
+        """
+        p1[0] = origin[0]
+        if p1[0] + 1 >= self.width:
+            p1[0] -= 1
+        p1[1] = origin[1]
+        if p1[1] + 1 >= self.height:
+            p1[1] -= 1
+
+        p0[0] = p1[0] + 1
+        p0[1] = p1[1]
+        p2[0] = p1[0]
+        p2[1] = p1[1] + 1
+        p3[0] = p1[0] + 1
+        p3[1] = p1[1] + 1
+        # No value is returned, results are stored in passed arrays.
+
     cpdef vector_from_xy(self, pos):
         raise NotImplementedError
 
@@ -224,15 +278,14 @@ cdef class TextureMap:
         """
         raise NotImplementedError
 
-    cpdef lat_lon_from_xy(self, tuple pos):
+    cpdef tuple lat_lon_from_xy(self, tuple pos):
         cdef double[2] lat_lon
         cdef double[2] xy_pos
-        xy_pos[0] = pos[0]
-        xy_pos[1] = pos[1]
+        cp2a_2d(pos, xy_pos)
         self.lat_lon_from_xy_(lat_lon, xy_pos)
         return lat_lon
 
-    cdef lat_lon_from_xy_(self, double[2] lat_lon, double[2] xy_pos):
+    cdef void lat_lon_from_xy_(self, double[2] lat_lon, double[2] xy_pos):
         cdef double[3] vector
         self.vector_from_xy_(vector, xy_pos)
         lat_lon_from_vector_(lat_lon, vector)
@@ -253,7 +306,7 @@ cdef class TextureMap:
     cdef void set_xy_(self, int[2] pos, int v):
         self._arr[pos[1]][pos[0]] = v
 
-    cpdef write_png(self, out):
+    cpdef void write_png(self, out):
         """
         Writes map as a png to the passed path
         :param out: path String
@@ -378,8 +431,7 @@ cdef class CubeMap(TextureMap):
 
     cpdef tile_from_xy(self, pos):
         cdef double[2] pos_
-        pos_[0] = pos[0]
-        pos_[1] = pos[1]
+        cp2a_2d(pos, pos_)
         return self._tile_from_xy(pos_)
 
     cdef object _tile_from_xy(self, double[2] pos):

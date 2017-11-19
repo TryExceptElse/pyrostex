@@ -20,6 +20,7 @@ def make_sample_spheroid():
     )
     end_t = time()
     print('Created Spheroid. Elapsed time: {}'.format(end_t - start_t))
+    print('writing debug graphics')
     spheroid.write_debug_png()
     print('Wrote debug graphics')
     print('Done')

@@ -4,13 +4,18 @@
 Handles generation of temperature map from height map
 """
 
-from libc.math cimport exp, cos
+include "macro.pxi"
 
-from .map cimport CubeMap, lat_lon_from_vector_
+# imports from packages
+from libc.math cimport exp, cos, log2
 
+import png
 import numpy as np
 
 cimport numpy as np
+
+# imports from within project
+from .map cimport CubeMap, lat_lon_from_vector_
 
 
 DEF ATM_M = 0.029  # molar mass of atmosphere
@@ -28,8 +33,7 @@ cdef class TMap(CubeMap):
 
     cpdef float t_from_lat_lon(self, pos):
         cdef double[2] pos_
-        pos_[0] = pos[0]
-        pos_[1] = pos[1]
+        cp2a_2d(pos, pos_)
         return t_from_stored_v(self.v_from_lat_lon_(pos_))
 
     cdef float t_from_lat_lon_(self, double[2] pos):
@@ -37,8 +41,7 @@ cdef class TMap(CubeMap):
 
     cpdef float t_from_xy(self, pos):
         cdef double[2] pos_
-        pos_[0] = pos[0]
-        pos_[1] = pos[1]
+        cp2a_2d(pos, pos_)
         stored_v = self.v_from_xy_(pos_)
         return t_from_stored_v(stored_v)
 
@@ -48,9 +51,7 @@ cdef class TMap(CubeMap):
 
     cpdef float t_from_vector(self, vector):
         cdef double[3] vector_
-        vector_[0] = vector[0]
-        vector_[1] = vector[1]
-        vector_[2] = vector[2]
+        cp2a_3d(vector, vector_)
         stored_v = self.v_from_vector_(vector_)
         return t_from_stored_v(stored_v)
 
@@ -68,6 +69,39 @@ cdef class TMap(CubeMap):
     cdef void set_xy_t_(self, int[2] pos, float t):
         stored_v = stored_v_from_t(t)
         self.set_xy_(pos, stored_v)
+
+    cpdef void write_png(self, out):
+        """
+        Writes map as a png to the passed path.
+        :param out: path String
+        :return: None
+        """
+        max = 64
+        if '.' not in out:
+            out += '.png'  # adjust out path
+        while True:
+            # try to get array to print. if a value is outside range,
+            # start over and increase max.
+            # this lets us see a map that is scaled to fit the t range
+            # of a planet.
+
+            out_arr = np.empty_like(self._arr, np.uint8)
+            for y, row in enumerate(self._arr):
+                for x, v in enumerate(row):
+                    if v > max:
+                        # increase max
+                        # max *= int(log2(v / max)) + 1
+                        while max < v:
+                            max *= 2
+                        continue  # restart
+                    out_arr[y][x] = int(v * 255 / max)
+            break  # if array was successfully finished
+
+        with open(out, 'wb') as f:
+            height = len(out_arr)
+            width = len(out_arr[0])
+            w = png.Writer(width, height, greyscale=True)
+            w.write(f, out_arr)
 
 cpdef TMap make_warming_map(
         HeightCubeMap height_map,
