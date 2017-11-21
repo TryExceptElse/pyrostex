@@ -20,6 +20,7 @@ from math import radians
 from libc.math cimport cos, sin, atan2, sqrt, pow
 
 DEF PI = 3.1415926535897932384626433832795028841971
+DEF TAU = 6.28318530718
 DEF QTR_PI = 0.78539816339
 
 DEF MIN_LAT = -1.57079632679
@@ -27,7 +28,9 @@ DEF MAX_LAT = 1.57079632679
 DEF LAT_RANGE = PI
 DEF MIN_LON = -PI
 DEF MAX_LON = PI
-DEF LON_RANGE = 6.28318530718
+DEF LON_RANGE = TAU
+
+DEF GAUSS_SAMPLES = 4
 
 
 cdef class TextureMap:
@@ -296,6 +299,10 @@ cdef class TextureMap:
         raise NotImplementedError
 
     cdef void ur_px_(self, int[2] new_pos, int[2] old_pos):
+        raise NotImplementedError
+
+    cdef double gauss_smooth_xy_(
+            self, double[2] pos, double radius, int samples):
         raise NotImplementedError
 
     cpdef vector_from_xy(self, pos):
@@ -680,6 +687,29 @@ cdef class CubeMap(TextureMap):
         else:
             new_pos[0] = old_pos[0] + 1
             new_pos[1] = old_pos[1] + 1
+
+    cdef double gauss_smooth_xy_(
+            self, double[2] pos, double radius, int samples):
+        """
+        Gets the gaussian smoothed value for the passed position,
+        using the passed radius and number of sample positions
+        Passed radius is in pixels
+        """
+        polar_vector = Vector(0, 0, 1)
+        # todo: don't use python vector objects. This is slow
+        pos_vector = vector_from_lat_lon((pos[0], pos[1]))
+        rotation = pos_vector.rotation_difference(polar_vector)  # todo: check
+        cdef double sum = 0
+        cdef double lat, lon
+        for i in range(samples):
+            lon = i / samples * TAU
+            for j in range(samples):
+                lat = MAX_LAT / self.height / samples * radius * j
+                point_vector = vector_from_lat_lon((lat, lon))
+                point_vector.rotate(rotation)
+                sum += self.v_from_vector(point_vector)
+        sum /= samples * samples
+        return sum
 
     cpdef vector_from_xy(self, pos):
         tile = self.tile_from_xy(pos)

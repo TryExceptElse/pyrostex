@@ -1,7 +1,10 @@
+# cython: infer_types=True, boundscheck=False, nonecheck=False, language_level=3
+
 """
 Stores height cube map class and associated functions
 """
 
+include "macro.pxi"
 
 from .map cimport CubeMap
 
@@ -17,8 +20,7 @@ DEF CENTER_STORED_V = 32767
 cdef class HeightCubeMap(CubeMap):
     cpdef float h_from_lat_lon(self, pos):
         cdef double[2] pos_
-        pos_[0] = pos[0]
-        pos_[1] = pos[1]
+        cp2a_2d(pos, pos_)
         return h_from_stored_v(self.v_from_lat_lon_(pos_))
 
     cdef float h_from_lat_lon_(self, double[2] pos):
@@ -32,8 +34,7 @@ cdef class HeightCubeMap(CubeMap):
         :return:
         """
         cdef double[2] pos_
-        pos_[0] = pos[0]
-        pos_[1] = pos[1]
+        cp2a_2d(pos, pos_)
         stored_v = self.v_from_xy_(pos_)
         return h_from_stored_v(stored_v)
 
@@ -43,8 +44,7 @@ cdef class HeightCubeMap(CubeMap):
 
     cpdef float h_from_rel_xy(self, tuple pos):
         cdef double[2] pos_
-        pos_[0] = pos[0]
-        pos_[1] = pos[1]
+        cp2a_2d(pos, pos_)
         stored_v = self.v_from_rel_xy_(pos_)
         return h_from_stored_v(stored_v)
 
@@ -62,9 +62,7 @@ cdef class HeightCubeMap(CubeMap):
         :return:
         """
         cdef double[3] vector_
-        vector_[0] = vector[0]
-        vector_[1] = vector[1]
-        vector_[2] = vector[2]
+        cp2a_3d(vector, vector_)
         stored_v = self.v_from_vector_(vector_)
         return h_from_stored_v(stored_v)
 

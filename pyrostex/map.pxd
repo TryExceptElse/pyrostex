@@ -40,6 +40,9 @@ cdef class TextureMap:
     cdef void u_px_(self, int[2] new_pos, int[2] old_pos)
     cdef void ur_px_(self, int[2] new_pos, int[2] old_pos)
 
+    cdef double gauss_smooth_xy_(
+            self, double[2] pos, double radius, int samples)
+
     cpdef object vector_from_xy(self, pos)
     cdef void vector_from_xy_(self, double[3] vector, double[2] pos)
     cpdef tuple lat_lon_from_xy(self, tuple pos)
