@@ -9,7 +9,7 @@ def make_sample_spheroid():
     print('creating spheroid')
     start_t = time()
     spheroid = Spheroid(
-        124,
+        141,
         'rock',
         1e26,
         220,

@@ -22,18 +22,24 @@ cdef class TextureMap:
     cdef int v_from_xy_(self, double[2] pos)
     cpdef int v_from_rel_xy(self, tuple pos)
     cdef int v_from_rel_xy_(self, double[2] pos)
+    cdef int v_from_xy_indices_(self, int[2] pos)
     cpdef int v_from_vector(self, vector)
     cdef int v_from_vector_(self, double[3] vector)
 
     cpdef object gradient_from_xy(self, tuple[double] pos)
     cdef void gradient_from_xy_(self, double[2] gr, double[2] pos)
-    cdef inline void _gr_sample_pos(
+    cdef inline void _sample_pos(
             self,
-            double[2] p0,
-            double[2] p1,
-            double[2] p2,
-            double[2] p3,
+            int[2] p0,
+            int[2] p1,
+            int[2] p2,
+            int[2] p3,
             double[2] origin)
+
+    cdef void r_px_(self, int[2] new_pos, int[2] old_pos)
+    cdef void u_px_(self, int[2] new_pos, int[2] old_pos)
+    cdef void ur_px_(self, int[2] new_pos, int[2] old_pos)
+
     cpdef object vector_from_xy(self, pos)
     cdef void vector_from_xy_(self, double[3] vector, double[2] pos)
     cpdef tuple lat_lon_from_xy(self, tuple pos)
@@ -50,7 +56,8 @@ cdef class CubeMap(TextureMap):
     """
 
     cdef list tile_maps
-    cdef public int tile_width, tile_height
+    cdef public int tile_width, tile_height, two_thirds_width
+    
     # not identical; can be passed a tile to which xy is relative
     cpdef int v_from_xy(self, pos, tile=?)
     cpdef object get_tile(self, index)

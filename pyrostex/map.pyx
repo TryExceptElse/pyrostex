@@ -209,6 +209,18 @@ cdef class TextureMap:
         abs_pos[1] = pos[1] * self.height
         return self.v_from_xy_(abs_pos)
 
+    cdef int v_from_xy_indices_(self, int[2] pos):
+        a = pos[0]
+        b = pos[1]
+        if not 0 <= a <= self.width - 1:
+            raise ValueError(
+                '{} outside width range 0 - {}'.format(a, self.width - 1))
+        if not 0 <= b <= self.height - 1:
+            raise ValueError(
+                '{} outside height range 0 - {}'.format(b, self.height - 1))
+
+        return self._arr[b][a]
+
     cpdef int v_from_vector(self, vector):
         """
         Gets pixel value identified by vector.
@@ -227,46 +239,64 @@ cdef class TextureMap:
         self.gradient_from_xy_(gr, pos_)
         return Vector((gr[0], gr[1]))
 
+    @cython.cdivision(True)
     cdef void gradient_from_xy_(self, double[2] gr, double[2] pos):
-        cdef double[2] p0, p1, p2, p3
+        cdef int[2] p0, p1, p2, p3
         cdef int v0, v1, v2, v3
-        self._gr_sample_pos(p0, p1, p2, p3, pos)
-        v0 = self.v_from_xy_(p0)
-        v1 = self.v_from_xy_(p1)
-        v2 = self.v_from_xy_(p2)
-        v3 = self.v_from_xy_(p3)
-        # find gradient
-        gr[0] = float((v0 + v3) - (v1 + v2)) / 2  # x value of gradient vector
-        gr[1] = float((v0 + v1) - (v2 + v3)) / 2  # y value of gradient vector
-        # Does not return anything, result is stored in passed gr arr.
-
-    cdef inline void _gr_sample_pos(
+        self._sample_pos(p0, p1, p2, p3, pos)
+        if p0[0] == -1:
+            # if no fourth quadrant exists for the passed position
+            v1 = self.v_from_xy_indices_(p0)
+            v2 = self.v_from_xy_indices_(p1)
+            v3 = self.v_from_xy_indices_(p2)
+            gr[0] = float(v3 - v2)
+            gr[1] = float(v1 - v2)
+        else:
+            # otherwise, if four positions are available to be sampled..
+            v0 = self.v_from_xy_indices_(p0)
+            v1 = self.v_from_xy_indices_(p1)
+            v2 = self.v_from_xy_indices_(p2)
+            v3 = self.v_from_xy_indices_(p3)
+            # find gradient
+            gr[0] = float((v0 + v3) - (v1 + v2)) / 2  # x v of gradient vector
+            gr[1] = float((v0 + v1) - (v2 + v3)) / 2  # y v of gradient vector
+            # Does not return anything, result is stored in passed gr arr.
+        
+    cdef inline void _sample_pos(
             self,
-            double[2] p0,
-            double[2] p1,
-            double[2] p2,
-            double[2] p3,
-            double[2] origin):
+            int[2] p0,
+            int[2] p1,
+            int[2] p2,
+            int[2] p3,
+            double[2] pos):
         """
-        Finds positions to sample in order to find the gradient at the
-        passed origin point.
-        origin is the position sampled, p0 upper right,
-        p1 is upper left, p2 is lower left, and p3 is lower right.
+        Gets indices of map that contain information relevant to passed
+        double position.
+        p3 may be given a value of (-1, -1) indicating that it does not
+        exist (for example; if passed position is located where
+        geometry folds, such as a cube's corner)
         """
-        p1[0] = origin[0]
-        if p1[0] + 1 >= self.width:
-            p1[0] -= 1
-        p1[1] = origin[1]
-        if p1[1] + 1 >= self.height:
-            p1[1] -= 1
+        p2[0] = int(pos[0])
+        p2[1] = int(pos[1])
+        self.r_px_(p3, p2)
+        self.u_px_(p1, p2)
+        self.ur_px_(p0, p2)
 
-        p0[0] = p1[0] + 1
-        p0[1] = p1[1]
-        p2[0] = p1[0]
-        p2[1] = p1[1] + 1
-        p3[0] = p1[0] + 1
-        p3[1] = p1[1] + 1
-        # No value is returned, results are stored in passed arrays.
+
+    cdef void r_px_(self, int[2] new_pos, int[2] old_pos):
+        """
+        Returns position 1 map pixel right of the passed position
+        """
+        raise NotImplementedError
+
+    cdef void u_px_(self, int[2] new_pos, int[2] old_pos):
+        """
+        Returns position 1 map pixel down of the passed position
+        """
+        raise NotImplementedError
+
+    cdef void ur_px_(self, int[2] new_pos, int[2] old_pos):
+        raise NotImplementedError
 
     cpdef vector_from_xy(self, pos):
         raise NotImplementedError
@@ -365,6 +395,7 @@ cdef class CubeMap(TextureMap):
         super(CubeMap, self).set_arr(arr)
         self.tile_height = int(self.height / 2)
         self.tile_width = int(self.width / 3)
+        self.two_thirds_width = self.tile_width * 2  # used in some methods
 
     cpdef int v_from_lat_lon(self, pos):
         """
@@ -441,7 +472,8 @@ cdef class CubeMap(TextureMap):
 
     cdef object _tile_from_xy(self, double[2] pos):
         return self.tile_maps[self.tile_index_from_xy_(pos)]
-        
+
+    @cython.cdivision(True)
     cdef short tile_index_from_xy_(self, double[2] pos):
         """
         Private method for finding the index corresponding to 
@@ -450,20 +482,204 @@ cdef class CubeMap(TextureMap):
         cdef:
             double x = pos[0]
             double y = pos[1]
-        third_width = self.width / 3
         if not 0 <= x < self.width:
             raise ValueError('x {} outside range: 0-{}'.format(x, self.width))
         if not 0 <= y < self.height:
             raise ValueError('y {} outside range: 0-{}'.format(y, self.height))
-        if x < third_width:
+        if x < self.tile_width:
             i = 0
-        elif x < third_width * 2:
+        elif x < self.two_thirds_width:
             i = 1
         else:
             i = 2
         if y >= self.height / 2:
             i += 3
         return i
+
+    @cython.cdivision(True)
+    @cython.wraparound(False)
+    cdef void r_px_(self, int[2] new_pos, int[2] old_pos):
+        """
+        Returns position 1 map pixel right of the passed position.
+        'Right' is defined purely as relative to the referenced pixel
+        as it appears in the map, and bears no guaranteed relationship
+        to the orientation of the Sphere as described by the cube map.
+        """
+        x = old_pos[0]
+        y = old_pos[1]
+        # if passed pos is in tile 0, 1, or 2..
+        if y < self.height:
+            # if x is on the rightmost border, or center-right border...
+            if x == self.width - 1 or x == self.two_thirds_width - 1:
+                # move to the left edge of the tile to the left
+                new_pos[0] = x - self.two_thirds_width + 1
+                new_pos[1] = y
+            # or, if x is on the right border of tile 0, go to tile 3
+            elif x == self.tile_width - 1:
+                new_pos[0] = x - self.tile_width + 1
+                new_pos[1] = x + self.tile_height
+            # otherwise, just increase x by 1
+            else:
+                new_pos[0] = x + 1
+                new_pos[1] = y
+        # otherwise if position is in lower row
+        else:
+            # if x is on tile 3's right border, go to tile 0's left border
+            if x == self.tile_width - 1:
+                new_pos[0] = 0
+                new_pos[1] = y - self.tile_height
+            elif x == self.two_thirds_width - 1:
+                if self.tile_width == self.tile_height:
+                    new_pos[0] = y - self.tile_height
+                else:
+                    new_pos[0] = ((y - self.tile_height) *
+                        self.tile_width / self.tile_height)
+                new_pos[1] = self.tile_height - 1
+            elif x == self.width - 1:
+                if self.tile_width == self.tile_height:
+                    new_pos[0] = self.width - (y - self.tile_height) - 1
+                else:
+                    new_pos[0] = self.width - 1 - \
+                        ((y - self.tile_height) *
+                         self.tile_width / self.tile_height)
+                new_pos[1] = 0
+            # otherwise, if x is not on a border
+            else:
+                new_pos[0] = x + 1
+                new_pos[1] = y
+
+    @cython.cdivision(True)
+    @cython.wraparound(False)
+    cdef void u_px_(self, int[2] new_pos, int[2] old_pos):
+        """
+        Returns position 1 map pixel up from the passed position.
+        up in this case is relative to the y value.
+        This is to keep gradients, etc accurately representative
+        as slopes of x and y values, without having to invert values.
+        """
+        cdef int x, y
+        x = old_pos[0]
+        y = old_pos[1]
+        # if y is at max value in tile 0, 1, or 2...
+        if y == self.tile_height - 1:
+            if x < self.tile_width:
+                new_pos[0] = self.two_thirds_width - 1
+                if self.height == self.width:
+                    new_pos[1] = self.tile_height + (x - self.two_thirds_width)
+                else:
+                    new_pos[1] = self.tile_height + \
+                        ((x - self.two_thirds_width) *
+                         self.tile_height / self.tile_width)
+            elif x < self.two_thirds_width:
+                new_pos[0] = x
+                new_pos[1] = y + 1
+            else:
+                new_pos[0] = self.tile_width - 1
+                if self.height == self.width:
+                    new_pos[1] = self.height - 1 - x
+                else:
+                    new_pos[1] = self.height - 1 - \
+                        (x * self.tile_height / self.tile_width)
+        elif y == self.height - 1:
+            # same algorithm works for upper border of tile 3 and 4
+            if x < self.two_thirds_width:
+                new_pos[0] = self.two_thirds_width - 1 - x
+                new_pos[1] = self.height - 1
+            else:
+                # handle tile 5
+                new_pos[0] = x - self.two_thirds_width
+                new_pos[1] = self.tile_height - 1
+        else:
+            new_pos[0] = old_pos[0]
+            new_pos[1] = old_pos[1] + 1
+
+    @cython.cdivision(True)
+    @cython.wraparound(False)
+    cdef void ur_px_(self, int[2] new_pos, int[2] old_pos):
+        """
+        Returns position 1 map pixel up from the passed position,
+        and 1 to the right.
+        Up in this case is relative to the y value of the position.
+        May return a value of (-1, -1) indicating that no upper-right
+        position exists (for example, if the pixel resides at
+        """
+        cdef int x, y
+        x = old_pos[0]
+        y = old_pos[1]
+        # if x is at any right-side edge of a tile, handle
+        # case specially
+        if x == self.tile_width - 1:
+            if y == self.tile_height - 1 or y == self.height - 1:
+                # no fourth position exists
+                new_pos[0] = -1
+                new_pos[1] = -1
+            elif y < self.tile_height:
+                new_pos[0] = 0
+                new_pos[1] = x + self.tile_height + 1
+            else:
+                new_pos[0] = self.two_thirds_width
+                new_pos[1] = x - self.tile_height + 1
+        elif x == self.two_thirds_width - 1:
+            if y == self.tile_height - 1 or y == self.height - 1:
+                # no fourth position exists
+                new_pos[0] = -1
+                new_pos[1] = -1
+            elif y < self.tile_height:
+                new_pos[0] = 0
+                new_pos[1] = y + 1
+            else:
+                if self.tile_height == self.tile_width:
+                    new_pos[0] = y - self.tile_height + 1
+                else:
+                    new_pos[1] = (y - self.tile_height) * \
+                        self.tile_width / self.tile_height + 1
+                new_pos[1] = self.tile_height - 1
+        elif x == self.width - 1:
+            if y == self.tile_height - 1 or y == self.height - 1:
+                # no fourth position exists
+                new_pos[0] = -1
+                new_pos[1] = -1
+            elif y < self.tile_height:
+                new_pos[0] = self.tile_width
+                new_pos[1] = y + 1
+            else:
+                if self.tile_height == self.tile_width:
+                    new_pos[0] = y + self.tile_height + 1
+                else:
+                    new_pos[0] = (y - self.tile_height) * \
+                        self.tile_width / self.tile_height + \
+                        self.two_thirds_width + 1
+        elif y == self.tile_height - 1:
+            if x < self.tile_width:
+                new_pos[0] = self.two_thirds_width - 1
+                if self.tile_width == self.tile_height:
+                    new_pos[1] = x + 1 + self.tile_height
+                else:
+                    new_pos[1] = x * self.tile_height / self.tile_width + \
+                        self.tile_height + 1
+            elif x < self.two_thirds_width:
+                # act normally
+                new_pos[0] = old_pos[0] + 1
+                new_pos[1] = old_pos[1] + 1
+            else:
+                new_pos[0] = self.tile_width
+                if self.tile_height == self.tile_width:
+                    new_pos[1] = self.height - 1 - (x - self.two_thirds_width)
+                else:
+                    new_pos[1] = self.height - 1 - \
+                        (x - self.two_thirds_width) * self.tile_height / \
+                        self.tile_width
+        elif y == self.height - 1:
+            # same logic handles upper-y edge of tiles 3 and 4
+            if x < self.two_thirds_width:
+                new_pos[0] = self.two_thirds_width - x - 2
+                new_pos[1] = self.height - 1
+            else:
+                new_pos[0] = x - self.two_thirds_width + 1
+                new_pos[1] = self.height - 1
+        else:
+            new_pos[0] = old_pos[0] + 1
+            new_pos[1] = old_pos[1] + 1
 
     cpdef vector_from_xy(self, pos):
         tile = self.tile_from_xy(pos)
@@ -527,7 +743,7 @@ cdef class CubeMap(TextureMap):
         elif tile_index == 4:
             vector[0], vector[1], vector[2] = a, b, 1
         elif tile_index == 5:
-            vector[0], vector[1], vector[2] = a, b, -1
+            vector[0], vector[1], vector[2] = -a, b, -1
         else:
             raise ValueError('Invalid face index: {}'.format(tile_index))
         # No value returned, results are stored in passed vector.
@@ -592,6 +808,40 @@ cdef class LatLonMap(TextureMap):
         lat_lon_from_vector_(lat_lon, vector)
         return self.v_from_lat_lon_(lat_lon)
 
+    @cython.wraparound(False)
+    cdef void r_px_(self, int[2] new_pos, int[2] old_pos):
+        if old_pos[0] == self.width - 1:
+            # reset to other side of map
+            new_pos[0] = 0
+        else:
+            new_pos[0] = old_pos[0] + 1
+        new_pos[1] = old_pos[1]
+
+    @cython.cdivision(True)
+    @cython.wraparound(False)
+    cdef void u_px_(self, int[2] new_pos, int[2] old_pos):
+        if old_pos[1] < self.height - 1:
+            new_pos[0] = old_pos[0]
+            new_pos[1] = old_pos[1] + 1
+        else:
+            new_pos[0] = old_pos[0] + self.width / 2 - 1
+            if new_pos[0] >= self.width:
+                new_pos[0] -= self.width
+            new_pos[1] = self.height - 1
+
+
+    @cython.wraparound(False)
+    @cython.cdivision(True)
+    cdef void ur_px_(self, int[2] new_pos, int[2] old_pos):
+        if old_pos[1] < self.height - 1:
+            new_pos[0] = old_pos[0] + 1
+            new_pos[1] = old_pos[1] + 1
+        else:
+            new_pos[0] = old_pos[0] + self.width / 2
+            new_pos[1] = old_pos[1]
+        if new_pos[0] >= self.width:
+            new_pos[0] -= self.width
+
     cpdef vector_from_xy(self, pos):
         lat_lon = self.xy_to_lat_lon(pos)
         return vector_from_lat_lon(lat_lon)
@@ -606,6 +856,7 @@ cdef class LatLonMap(TextureMap):
         self.lat_lon_to_xy_(xy_pos, lat_lon_)
         return xy_pos[0], xy_pos[1]
 
+    @cython.cdivision(True)
     cdef void lat_lon_to_xy_(self, double[2] xy_pos, double[2] lat_lon):
         cdef double x, y
         lat = lat_lon[0]
@@ -633,6 +884,7 @@ cdef class LatLonMap(TextureMap):
         xy_pos[1] = y
         # no return, result is stored in passed xy_pos memory view.
 
+    @cython.cdivision(True)
     cpdef xy_to_lat_lon(self, pos):
         x, y = pos
         relative_x = x / self.width
@@ -717,7 +969,7 @@ cdef class TileMap(TextureMap):
             a = x / z
             b = y / z
         elif self.cube_face == 5:
-            a = x / -z
+            a = x / z
             b = y / -z
         else:
             raise IndexError(self.cube_face)
@@ -742,6 +994,7 @@ cdef class TileMap(TextureMap):
         self.vector_from_xy_(vector, pos_)
         return Vector(vector)
 
+    @cython.cdivision(True)
     cdef void vector_from_xy_(self, double[3] vector, double[2] pos):
         a_index, b_index = pos[0], pos[1]
         if not 0 <= a_index <= self.width - 1:
@@ -777,7 +1030,7 @@ cdef class TileMap(TextureMap):
         elif self.cube_face == 4:
             vector[0], vector[1], vector[2] = a, b, 1
         elif self.cube_face == 5:
-            vector[0], vector[1], vector[2] = a, b, -1
+            vector[0], vector[1], vector[2] = -a, b, -1
         else:
             raise ValueError('Invalid face index: {}'.format(self.cube_face))
         # No value returned, results are stored in passed vector.
@@ -847,6 +1100,7 @@ cpdef lat_lon_from_vector(vector):
     return lat, lon
 
 
+@cython.wraparound(False)
 cdef lat_lon_from_vector_(double[2] lat_lon, double[3] vector):
     x = vector[0]
     y = vector[1]
