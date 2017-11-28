@@ -84,6 +84,8 @@ cdef class TextureMap:
             self.max_value = 255
         elif arr.dtype == np.uint16:
             self.max_value = 65535
+        elif arr.dtype == np.uint32:
+            self.max_value = 2 ** 32 - 1
         else:
             raise ValueError
 
@@ -182,8 +184,8 @@ cdef class TextureMap:
             vf = int(self._arr[b0][a0])  # may store shorts, uint16, etc
         elif a1 == -1 and b1:
             # if only one column
-            v0 = self._arr[b1][a0]
-            v1 = self._arr[b0][a0]
+            v0 = self._arr[b0][a0]
+            v1 = self._arr[b1][a0]
             vf = int(v1 * b_mod + v0 * (1 - b_mod))
         elif b1 == -1 and a1:
             # if only one row
@@ -345,7 +347,7 @@ cdef class TextureMap:
 
     @cython.cdivision(True)
     @cython.wraparound(False)
-    cpdef void write_png(self, out):
+    cpdef void write_png(self, unicode out):
         """
         Writes map as a png to the passed path
         :param out: path String
@@ -711,6 +713,7 @@ cdef class CubeMap(TextureMap):
         sum /= samples * samples
         return sum
 
+    @cython.wraparound(False)
     cpdef vector_from_xy(self, pos):
         tile = self.tile_from_xy(pos)
         # get relative position on tile from cube-map position
@@ -719,6 +722,7 @@ cdef class CubeMap(TextureMap):
         vector = tile.get_vector_from_xy(rel_pos)
         return vector
 
+    @cython.wraparound(False)
     cdef void vector_from_xy_(self, double[3] vector, double[2] pos):
         cdef double[2] tile_ref_pos
         cdef double[2] rel_pos
@@ -729,6 +733,7 @@ cdef class CubeMap(TextureMap):
         self.vector_from_tile_xy_(vector, tile_index, rel_pos)
 
     @cython.cdivision(True)
+    @cython.wraparound(False)
     cdef void vector_from_tile_xy_(
             self, 
             double[3] vector, 
@@ -830,7 +835,7 @@ cdef class LatLonMap(TextureMap):
         :return: PixelValue
         """
         cdef double[3] vector_
-        vector_[0], vector_[1], vector_[2] = vector[0], vector[1], vector[2]
+        cp2a_3d(vector, vector_)
         return self.v_from_vector_(vector_)
 
     cdef int v_from_vector_(self, double[3] vector):
@@ -876,17 +881,18 @@ cdef class LatLonMap(TextureMap):
         lat_lon = self.xy_to_lat_lon(pos)
         return vector_from_lat_lon(lat_lon)
 
+    @cython.wraparound(False)
     cpdef lat_lon_to_xy(self, lat_lon):
         assert MIN_LON <= lat_lon[1] <= MAX_LON
         assert MIN_LAT <= lat_lon[0] <= MAX_LAT
         cdef double[2] xy_pos
         cdef double[2] lat_lon_
-        lat_lon_[0] = lat_lon[0]
-        lat_lon_[1] = lat_lon[1]
+        cp2a_2d(lat_lon, lat_lon_)
         self.lat_lon_to_xy_(xy_pos, lat_lon_)
         return xy_pos[0], xy_pos[1]
 
     @cython.cdivision(True)
+    @cython.wraparound(False)
     cdef void lat_lon_to_xy_(self, double[2] xy_pos, double[2] lat_lon):
         cdef double x, y
         lat = lat_lon[0]
@@ -961,12 +967,11 @@ cdef class TileMap(TextureMap):
         :return: PixelValue
         """
         cdef double[3] vector_
-        vector_[0] = vector.x
-        vector_[1] = vector.y
-        vector_[2] = vector.z
+        cp2a_3d(vector, vector_)
         return self.v_from_vector_(vector_)
 
     @cython.cdivision(True)
+    @cython.wraparound(False)
     cdef int v_from_vector_(self, double[3] vector):
         """
         Gets value associated with passed vector.
@@ -1016,15 +1021,17 @@ cdef class TileMap(TextureMap):
         """
         # todo
 
+    @cython.wraparound(False)
     cpdef vector_from_xy(self, pos):
         cdef double[3] vector
         cdef double[2] pos_
-        vector = np.ndarray((3), np.double)
+        # vector = np.ndarray((3), np.double)
         pos_[0], pos_[1] = pos
         self.vector_from_xy_(vector, pos_)
         return Vector(vector)
 
     @cython.cdivision(True)
+    @cython.wraparound(False)
     cdef void vector_from_xy_(self, double[3] vector, double[2] pos):
         a_index, b_index = pos[0], pos[1]
         if not 0 <= a_index <= self.width - 1:
@@ -1080,7 +1087,8 @@ cdef class CubeSide(TileMap):
         self.width = int(cube_map_shape[1] / 3)
         assert self.height == cube_map_shape[0] / 2
         assert self.width == cube_map_shape[1] / 3
-    
+
+    @cython.wraparound(False)
     cpdef int v_from_xy(self, pos):
         """
         Gets pixel value identified by vector.

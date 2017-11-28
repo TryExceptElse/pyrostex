@@ -49,7 +49,7 @@ cdef class TextureMap:
     cdef void lat_lon_from_xy_(self, double[2] lat_lon, double[2] xy_pos)
     cpdef void set_xy(self, pos, int v)
     cdef void set_xy_(self, int[2] pos, int v)
-    cpdef void write_png(self, out)
+    cpdef void write_png(self, unicode out)
 
 
 cdef class CubeMap(TextureMap):

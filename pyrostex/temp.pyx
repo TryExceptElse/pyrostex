@@ -73,7 +73,7 @@ cdef class TMap(CubeMap):
 
     @cython.cdivision(True)
     @cython.wraparound(False)
-    cpdef void write_png(self, out):
+    cpdef void write_png(self, unicode out):
         """
         Writes map as a png to the passed path.
         :param out: path String

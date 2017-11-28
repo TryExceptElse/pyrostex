@@ -7,6 +7,7 @@ import settings
 from .map import LatLonMap, CubeMap
 from .height import HeightCubeMap as HCubeMap
 from .temp import make_warming_map
+from .wind import make_wind_map
 
 TN_PATH = os.path.join(settings.ROOT_PATH, 'pyrostex')
 TN_RESOURCE_PATH = os.path.join(TN_PATH, 'resources')
@@ -90,6 +91,7 @@ class Spheroid:
     def build(self):
         self.height_map = self.make_height_cube_map()
         self.warming_map = self.make_warming_map()
+        self.wind_map = self.make_wind_map()
         self.temp_map = self.make_temp_map()
         self.tex_map = self.make_tex_map()
 
@@ -181,6 +183,14 @@ class Spheroid:
             atm_warming=self.atm_warming,
             base_gravity=self.surface_gravities,
             radius=self.radius)
+
+    def make_wind_map(self):
+        return make_wind_map(
+            self.warming_map,
+            self.seed + 100,
+            self.mass,
+            self.radius,
+            self.surface_pressure)
 
     def make_temp_map(self):
         """
