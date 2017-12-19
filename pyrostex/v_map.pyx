@@ -28,13 +28,13 @@ cdef class VectorMap(CubeMap):
                              'Got: {}'.format(kwargs['data_type']))
         super(VectorMap, self).__init__(**kwargs)
 
-    cdef int v_from_xy_(self, double[2] pos) except? -1:
+    cdef int v_from_xy_(self, vec2 pos) except? -1:
         cdef int[2] vec
         self.vec_from_xy_(vec, pos)
         return self._2d_to_v(vec)
 
     @cython.wraparound(False)
-    cdef void vec_from_xy_(self, int[2] vec, double[2] pos):
+    cdef void vec_from_xy_(self, int[2] vec, vec2 pos):
         """
         Gets pixel value at passed position on this map.
         :param pos: pos
@@ -44,8 +44,8 @@ cdef class VectorMap(CubeMap):
         cdef int[2] v0, v1, v2, v3
         cdef float a_mod, b_mod
 
-        a = pos[0]
-        b = pos[1]
+        a = pos.x
+        b = pos.y
         if not 0 <= a <= self.width - 1:
             raise ValueError(
                 '{} outside width range 0 - {}'.format(a, self.width - 1))

@@ -12,12 +12,13 @@ Maps for storing data about a map for a sphere.
 # todo:
 #   successfully generate pressure map
 #   refactor to use memory view of floats instead of np array
-#   use vec2, vec3, etc instead of double[2] and double[3]
 #   generate wind vector map from pressure map
 
+# includes
 include "flags.pxi"
 include "macro.pxi"
 
+# package imports
 import numpy as np
 import png
 import itertools as itr
@@ -25,11 +26,13 @@ import itertools as itr
 cimport numpy as np
 cimport cython
 
-
 from mathutils import Vector
 
 from math import radians
 from libc.math cimport cos, sin, atan2, sqrt, pow, fabs, ceil, log2
+
+# project imports
+from .includes cimport cmathutils as mu
 
 DEF PI = 3.1415926535897932384626433832795028841971
 DEF TAU = 6.2831853071795864769252867665590057683942
@@ -134,19 +137,20 @@ cdef class TextureMap:
         :param height int height of new data array
         """
         self.set_arr(self.make_arr(width, height, p.data_type))
-        assert self.height == height, (self.height, height)
-        assert self.width == width, (self.width, width)
+        IF ASSERTS:
+            assert self.height == height, (self.height, height)
+            assert self.width == width, (self.width, width)
 
-        cdef double[2] pos
-        cdef double[3] vector
+        cdef vec2 pos
+        cdef vec3 vector
         cdef int[2] map_pos
         cdef int v
         for x in range(width):
             for y in range(height):
                 # get vector corresponding to position
-                pos[0] = x
-                pos[1] = y
-                self.vector_from_xy_(vector, pos)
+                pos.x = x
+                pos.y = y
+                vector = self.vector_from_xy_(pos)
                 v = p.v_from_vector_(vector)
                 map_pos[0] = x
                 map_pos[1] = y
@@ -163,7 +167,7 @@ cdef class TextureMap:
             .format(self.__class__.__name__)
         )
 
-    cdef int v_from_lat_lon_(self, double[2] pos) except? -1:
+    cdef int v_from_lat_lon_(self, latlon pos) except? -1:
         """
         Gets value stored for passed latitude, longitude
         :param pos lat, lon
@@ -180,17 +184,16 @@ cdef class TextureMap:
         :param pos: pos
         :return int
         """
-        cdef double[2] pos_
-        cp2a_2d(pos, pos_)
-        if not 0 <= pos_[0] < self.width:
+        cdef vec2 pos_ = cp2v_2d(pos)
+        if not 0 <= pos_.x < self.width:
             raise ValueError('x value: {} was greater than width: {}'
-                             .format(pos_[0], self.width))
-        if not 0 <= pos_[1] < self.height:
+                             .format(pos_.x, self.width))
+        if not 0 <= pos_.y < self.height:
             raise ValueError('y value: {} was greater than height: {}'
-                             .format(pos_[1], self.height))
+                             .format(pos_.y, self.height))
         return self.v_from_xy_(pos_)
 
-    cdef int v_from_xy_(self, double[2] pos) except? -1:
+    cdef int v_from_xy_(self, vec2 pos) except? -1:
         """
         Gets pixel value at passed position on this map.
         Given a position between indices, will return a weighted
@@ -198,10 +201,10 @@ cdef class TextureMap:
         :param pos: pos
         :return: int
         """
-        if not 0 <= pos[0] <= self.width - 1:
-            raise ValueError('x ({}) outside valid range'.format(pos[0]))
-        if not 0 <= pos[1] <= self.height - 1:
-            raise ValueError('y ({}) outside valid range'.format(pos[0]))
+        if not 0 <= pos.x <= self.width - 1:
+            raise ValueError('x ({}) outside valid range'.format(pos.x))
+        if not 0 <= pos.y <= self.height - 1:
+            raise ValueError('y ({}) outside valid range'.format(pos.x))
         return sample(self._arr, pos)
 
     cpdef int v_from_rel_xy(self, tuple pos) except? -1:
@@ -213,25 +216,24 @@ cdef class TextureMap:
         IF ASSERTS:
             assert 0 <= pos[0] < 1, pos[0]
             assert 0 <= pos[1] < 1, pos[1]
-        cdef double[2] pos_
-        cp2a_2d(pos, pos_)
+        cdef vec2 pos_ = cp2v_2d(pos)
         return self.v_from_rel_xy_(pos_)
 
-    cdef int v_from_rel_xy_(self, double[2] pos) except? -1:
+    cdef int v_from_rel_xy_(self, vec2 pos) except? -1:
         """
         Gets value stored for passed x, y position in TextureMap data.
         :param pos x, y floats in range (0-1) inclusive
         :return int
         """
         IF ASSERTS:
-            assert 0 <= pos[0] <= 1, pos[0]
-            assert 0 <= pos[1] <= 1, pos[1]
-        cdef double[2] abs_pos
-        abs_pos[0] = pos[0] * (self.width - 1)
-        abs_pos[1] = pos[1] * (self.height - 1)
+            assert 0 <= pos.x <= 1, pos.x
+            assert 0 <= pos.y <= 1, pos.y
+        cdef vec2 abs_pos
+        abs_pos.x = pos.x * (self.width - 1)
+        abs_pos.y = pos.y * (self.height - 1)
         IF ASSERTS:
-            assert 0 <= abs_pos[0] <= self.width
-            assert 0 <= abs_pos[1] <= self.height
+            assert 0 <= abs_pos.x <= self.width
+            assert 0 <= abs_pos.y <= self.height
         return self.v_from_xy_(abs_pos)
 
     cdef int v_from_xy_indices_(self, int[2] pos) except? -1:
@@ -261,7 +263,7 @@ cdef class TextureMap:
             .format(self.__class__.__name__)
             )
 
-    cdef int v_from_vector_(self, double[3] vector) except? -1:
+    cdef int v_from_vector_(self, vec3 vector) except? -1:
         """
         Gets pixel value identified by vector.
         :param vector: vec3
@@ -278,29 +280,29 @@ cdef class TextureMap:
         :param pos x, y int or floats
         :return mathutils.Vector
         """
-        cdef double[2] gr
-        cdef double[2] pos_
-        cp2a_2d(pos, pos_)
-        self.gradient_from_xy_(gr, pos_)
-        return Vector((gr[0], gr[1]))
+        cdef vec2 gr
+        cdef vec2 pos_ = cp2v_2d(pos)
+        gr = self.gradient_from_xy_(pos_)
+        return Vector((gr.x, gr.y))
 
     @cython.cdivision(True)
-    cdef void gradient_from_xy_(self, double[2] gr, double[2] pos) except *:
+    cdef vec2 gradient_from_xy_(self, vec2 pos) except *:
         """
         Gets gradient of map as a vec2 at passed position.
         :param pos x, y doubles
         :return vec2
         """
-        cdef int[2] p0, p1, p2, p3
-        cdef int v0, v1, v2, v3
+        cdef int[2] p0, p1, p2, p3  # four sampled positions
+        cdef int v0, v1, v2, v3  # four sampled values
+        cdef vec2 gr  # gradient
         self._sample_pos(p0, p1, p2, p3, pos)
         if p0[0] == -1:
             # if no fourth quadrant exists for the passed position
             v1 = self.v_from_xy_indices_(p0)
             v2 = self.v_from_xy_indices_(p1)
             v3 = self.v_from_xy_indices_(p2)
-            gr[0] = float(v3 - v2)
-            gr[1] = float(v1 - v2)
+            gr.x = float(v3 - v2)
+            gr.y = float(v1 - v2)
         else:
             # otherwise, if four positions are available to be sampled..
             v0 = self.v_from_xy_indices_(p0)
@@ -308,9 +310,9 @@ cdef class TextureMap:
             v2 = self.v_from_xy_indices_(p2)
             v3 = self.v_from_xy_indices_(p3)
             # find gradient
-            gr[0] = float((v0 + v3) - (v1 + v2)) / 2  # x v of gradient vector
-            gr[1] = float((v0 + v1) - (v2 + v3)) / 2  # y v of gradient vector
-            # Does not return anything, result is stored in passed gr arr.
+            gr.x = float((v0 + v3) - (v1 + v2)) / 2  # x v of gradient vector
+            gr.y = float((v0 + v1) - (v2 + v3)) / 2  # y v of gradient vector
+        return gr
 
     cdef inline void _sample_pos(
             self,
@@ -318,7 +320,7 @@ cdef class TextureMap:
             int[2] p1,
             int[2] p2,
             int[2] p3,
-            double[2] pos):
+            vec2 pos):
         """
         Gets indices of map that contain information relevant to passed
         double position.
@@ -326,8 +328,8 @@ cdef class TextureMap:
         exist (for example; if passed position is located where
         geometry folds, such as a cube's corner)
         """
-        p2[0] = int(pos[0])
-        p2[1] = int(pos[1])
+        p2[0] = int(pos.x)
+        p2[1] = int(pos.y)
         self.r_px_(p3, p2)
         self.u_px_(p1, p2)
         self.ur_px_(p0, p2)
@@ -354,7 +356,7 @@ cdef class TextureMap:
         # no return value, result stored in new_pos mem_view
 
     cdef double gauss_smooth_xy_(
-            self, double[2] pos, double radius, int samples) except -1.:
+            self, vec2 pos, double radius, int samples) except -1.:
         raise NotImplementedError(
             '{} does not have method \'gauss_smooth_xy_\''
             .format(self.__class__.__name__)
@@ -366,7 +368,7 @@ cdef class TextureMap:
             .format(self.__class__.__name__)
         )
 
-    cdef void vector_from_xy_(self, double[3] vector, double[2] pos):
+    cdef vec3 vector_from_xy_(self, vec2 pos) except *:
         """
         From a passed position, sets vector array to x, y, z of
         associated position
@@ -377,17 +379,15 @@ cdef class TextureMap:
         )
 
     cpdef tuple lat_lon_from_xy(self, tuple pos):
-        cdef double[2] lat_lon
-        cdef double[2] xy_pos
-        cp2a_2d(pos, xy_pos)
-        self.lat_lon_from_xy_(lat_lon, xy_pos)
+        cdef latlon lat_lon
+        cdef vec2 xy_pos = cp2v_2d(pos)
+        lat_lon = self.lat_lon_from_xy_(xy_pos)
         return lat_lon
 
-    cdef void lat_lon_from_xy_(self, double[2] lat_lon, double[2] xy_pos):
-        cdef double[3] vector
-        self.vector_from_xy_(vector, xy_pos)
-        lat_lon_from_vector_(lat_lon, vector)
-        # does not return a value, instead stores result in lat_lon.
+    cdef latlon lat_lon_from_xy_(self, vec2 xy_pos) except *:
+        cdef vec3 vector = self.vector_from_xy_(xy_pos)
+        cdef latlon lat_lon= lat_lon_from_vector_(vector)
+        return lat_lon
 
     cpdef void set_xy(self, pos, int v):
         cdef int x, y
@@ -531,19 +531,17 @@ cdef class CubeMap(TextureMap):
         :param pos tuple(latitude, longitude)
         :return integer in range 0, 6
         """
-        cdef double[3] vector_
-        cp2a_3d(vector, vector_)
-        return self.tile_from_vector_(vector_)
+        return self.tile_from_vector_(cp2v_3d(vector))
 
-    cdef CubeSide tile_from_vector_(self, double[3] vector):
+    cdef CubeSide tile_from_vector_(self, vec3 vector):
         return self.get_tile(self.tile_index_from_vector_(vector))
 
-    cdef int tile_index_from_vector_(self, double[3] vector):
+    cdef int tile_index_from_vector_(self, vec3 vector):
         # prevent repeated calls to fabs and vector
         cdef double x, y, z, abs_x, abs_y, abs_z
-        x = vector[0]
-        y = vector[1]
-        z = vector[2]
+        x = vector.x
+        y = vector.y
+        z = vector.z
         abs_x = fabs(x)  # get absolute from float
         abs_y = fabs(y)
         abs_z = fabs(z)
@@ -565,71 +563,70 @@ cdef class CubeMap(TextureMap):
             else:
                 return 5
 
-    cpdef CubeSide tile_from_lat_lon(self, pos):
+    cpdef CubeSide tile_from_lat_lon(self, lat_lon):
         """
         Gets the tile on which the passed lat, lon value is located.
         :param pos tuple(latitude, longitude)
         :return integer in range 0, 6
         """
-        cdef double[2] pos_
-        cp2a_2d(pos, pos_)
-        if not MIN_LAT <= pos[0] <= MAX_LAT:
-            raise ValueError('latitude outside range: {}'.format(pos[0]))
-        if not MIN_LON <= pos[1] <= MAX_LON:
-            raise ValueError('longitude outside range: {}'.format(pos[1]))
-        return self.tile_from_lat_lon_(pos_)
+        cdef latlon lat_lon_ = cp2ll(lat_lon)
+        if not MIN_LAT <= lat_lon_.lat <= MAX_LAT:
+            raise ValueError('latitude outside range: {}'.format(lat_lon_.lat))
+        if not MIN_LON <= lat_lon_.lon <= MAX_LON:
+            raise ValueError('longitude outside range: {}'
+                             .format(lat_lon_.lon))
+        return self.tile_from_lat_lon_(lat_lon_)
 
-    cdef CubeSide tile_from_lat_lon_(self, double[2] pos):
-        cdef double[3] vector
-        vector_from_lat_lon_(vector, pos)
+    cdef CubeSide tile_from_lat_lon_(self, latlon lat_lon):
+        cdef vec3 vector = vector_from_lat_lon_(lat_lon)
         return self.tile_from_vector_(vector)
 
     cpdef CubeSide tile_from_xy(self, pos):
-        cdef double[2] pos_
-        cp2a_2d(pos, pos_)
-        return self._tile_from_xy(pos_)
+        return self.tile_from_xy_(cp2v_2d(pos))
 
-    cdef CubeSide _tile_from_xy(self, double[2] pos):
+    cdef CubeSide tile_from_xy_(self, vec2 pos):
         return self.tile_maps[self.tile_index_from_xy_(pos)]
 
+    cpdef short tile_index_from_xy(self, pos):
+        return self.tile_index_from_xy_(cp2v_2d(pos))
+
     @cython.cdivision(True)
-    cdef short tile_index_from_xy_(self, double[2] pos):
+    cdef short tile_index_from_xy_(self, vec2 pos):
         """
         Private method for finding the index corresponding to 
         a passed position.
         """
-        cdef:
-            double x = pos[0]
-            double y = pos[1]
-        if not 0 <= x < self.width:
-            raise ValueError('x {} outside range: 0-{}'.format(x, self.width))
-        if not 0 <= y < self.height:
-            raise ValueError('y {} outside range: 0-{}'.format(y, self.height))
-        if x < self.tile_width:
+        if not 0 <= pos.x < self.width:
+            raise ValueError(
+                'x {} outside range: 0-{}'.format(pos.x, self.width))
+        if not 0 <= pos.y < self.height:
+            raise ValueError(
+                'y {} outside range: 0-{}'.format(pos.y, self.height))
+        if pos.x < self.tile_width:
             i = 0
-        elif x < self.two_thirds_width:
+        elif pos.x < self.two_thirds_width:
             i = 1
         else:
             i = 2
-        if y >= self.height / 2:
+        if pos.y >= self.height / 2:
             i += 3
         return i
 
     cdef double gauss_smooth_xy_(
-            self, double[2] pos, double radius, int samples) except -1.:
+            self, vec2 pos, double radius, int samples) except -1.:
         # Should never return a negative normally.
         """
         Gets the gaussian smoothed value for the passed position,
         using the passed radius and number of sample positions
         Passed radius is in pixels
         """
-        cdef double[3] pos_vector_m_view
+        cdef vec3 c_pos_vector
         polar_vector = Vector((0, 0, 1))
         if samples < 1:
             raise ValueError('Samples must be >= 1. Got: {}'.format(samples))
         # todo: don't use python vector objects. This is slow
-        self.vector_from_xy_(pos_vector_m_view, pos)
-        pos_vector = Vector(pos_vector_m_view)
+        c_pos_vector = self.vector_from_xy_(pos)
+        pos_vector = Vector((c_pos_vector.x, c_pos_vector.y, c_pos_vector.z))
         rotation = polar_vector.rotation_difference(pos_vector)  # todo: check
         cdef double sum = 0.
         cdef double v
@@ -657,39 +654,37 @@ cdef class CubeMap(TextureMap):
 
     @cython.wraparound(False)
     cpdef vector_from_xy(self, pos):
-        cdef double[2] pos_
-        cdef double[3] vector_
-        cp2a_2d(pos, pos_)
-        self.vector_from_xy_(vector_, pos_)
-        return Vector(vector_)
-
+        cdef vec3 vector_ = self.vector_from_xy_(cp2v_2d(pos))
+        return Vector((vector_.x, vector_.y, vector_.z))
 
     @cython.wraparound(False)
-    cdef void vector_from_xy_(self, double[3] vector, double[2] pos):
-        cdef double[2] tile_ref_pos
-        cdef double[2] rel_pos
+    cdef vec3 vector_from_xy_(self, vec2 pos) except *:
+        cdef vec2 tile_ref_pos
+        cdef vec2 rel_pos
+
+        IF ASSERTS:
+            assert 0 <= pos.x <= self.width - 1, pos.x
+            assert 0 <= pos.y <= self.height - 1, pos.y
+
         tile_index = self.tile_index_from_xy_(pos)
-        self.reference_position_(tile_ref_pos, tile_index)
-        rel_pos[0] = pos[0] - tile_ref_pos[0]
-        rel_pos[1] = pos[1] - tile_ref_pos[1]
-        self.vector_from_tile_xy_(vector, tile_index, rel_pos)
+        tile_ref_pos = self.reference_position_(tile_index)
+        rel_pos.x = pos.x - tile_ref_pos.x
+        rel_pos.y = pos.y - tile_ref_pos.y
+        return self.vector_from_tile_xy_(tile_index, rel_pos)
 
     @cython.cdivision(True)
     @cython.wraparound(False)
-    cdef void vector_from_tile_xy_(
-            self, 
-            double[3] vector, 
-            int tile_index, 
-            double[2] pos):
+    cdef vec3 vector_from_tile_xy_(self, int tile_index, vec2 pos) except *:
         """
         Gets vector from xy position of passed face tile
         """
-        a_index, b_index = pos[0], pos[1]
+        cdef vec3 vector
+        a_index, b_index = pos.x, pos.y
         if not 0 <= a_index < self.tile_width:
             raise ValueError('Passed x {} was outside range 0-{}'
                              .format(a_index, self.tile_width))
         if not 0 <= b_index < self.tile_height:
-            raise ValueError('Passed x {} was outside range 0-{}'
+            raise ValueError('Passed y {} was outside range 0-{}'
                              .format(b_index, self.tile_height))
         min_rel_x = -1
         min_rel_y = -1
@@ -710,20 +705,20 @@ cdef class CubeMap(TextureMap):
         # assert -1 <= a <= 1, a
         # assert -1 <= b <= 1, b
         if tile_index == 0:
-            vector[0], vector[1], vector[2] = 1, a, b
+            vector.x, vector.y, vector.z = 1, a, b
         elif tile_index == 1:
-            vector[0], vector[1], vector[2] = a, -1, b
+            vector.x, vector.y, vector.z = a, -1, b
         elif tile_index == 2:
-            vector[0], vector[1], vector[2] = -1, -a, b
+            vector.x, vector.y, vector.z = -1, -a, b
         elif tile_index == 3:
-            vector[0], vector[1], vector[2] = -a, 1, b
+            vector.x, vector.y, vector.z = -a, 1, b
         elif tile_index == 4:
-            vector[0], vector[1], vector[2] = a, b, 1
+            vector.x, vector.y, vector.z = a, b, 1
         elif tile_index == 5:
-            vector[0], vector[1], vector[2] = -a, b, -1
+            vector.x, vector.y, vector.z = -a, b, -1
         else:
             raise ValueError('Invalid face index: {}'.format(tile_index))
-        # No value returned, results are stored in passed vector.
+        return vector
 
     cpdef get_reference_position(self, tile_index):
         if not 0 <= tile_index < 6:  # if outside valid range
@@ -733,13 +728,19 @@ cdef class CubeMap(TextureMap):
         elif tile_index < 6:
             return (tile_index - 3) * self.tile_width, self.tile_height
 
-    cdef void reference_position_(self, double[2] ref_pos, int tile_index):
+    cdef vec2 reference_position_(self, int tile_index) except *:
+        cdef vec2 ref_pos
         if tile_index < 3:
-            ref_pos[0] =  tile_index * self.tile_width
-            ref_pos[1] = 0
+            ref_pos.x =  tile_index * self.tile_width
+            ref_pos.y = 0
         elif tile_index < 6:
-            ref_pos[0] = (tile_index - 3) * self.tile_width
-            ref_pos[1] = self.tile_height
+            ref_pos.x = (tile_index - 3) * self.tile_width
+            ref_pos.y = self.tile_height
+
+        IF ASSERTS:
+            assert 0 <= ref_pos.x <= self.width * 2 / 3, ref_pos
+            assert 0 <= ref_pos.y <= self.height / 2, ref_pos
+        return ref_pos
 
 cdef class LatLonMap(TextureMap):
     """
@@ -764,11 +765,9 @@ cdef class LatLonMap(TextureMap):
         v = self.v_from_xy(xy_pos)
         return v
 
-    cdef int v_from_lat_lon_(self, double[2] pos) except? -1:
-        cdef double[2] xy_pos
-        self.lat_lon_to_xy_(xy_pos, pos)
-        v = self.v_from_xy_(xy_pos)
-        return v
+    cdef int v_from_lat_lon_(self, latlon pos) except? -1:
+        cdef vec2 xy_pos = self.lat_lon_to_xy_(pos)
+        return self.v_from_xy_(xy_pos)
 
     cpdef int v_from_vector(self, vector) except? -1:
         """
@@ -776,35 +775,29 @@ cdef class LatLonMap(TextureMap):
         :param vector: Vector (x, y, z)
         :return: PixelValue
         """
-        cdef double[3] vector_
-        cp2a_3d(vector, vector_)
-        return self.v_from_vector_(vector_)
+        return self.v_from_vector_(cp2v_3d(vector))
 
-    cdef int v_from_vector_(self, double[3] vector) except? -1:
-        cdef double[2] lat_lon
-        lat_lon_from_vector_(lat_lon, vector)
+    cdef int v_from_vector_(self, vec3 vector) except? -1:
+        cdef latlon lat_lon = lat_lon_from_vector_(vector)
         return self.v_from_lat_lon_(lat_lon)
 
     cpdef vector_from_xy(self, pos):
-        lat_lon = self.xy_to_lat_lon(pos)
-        return vector_from_lat_lon(lat_lon)
+        return vector_from_lat_lon(self.xy_to_lat_lon(pos))
 
     @cython.wraparound(False)
     cpdef lat_lon_to_xy(self, lat_lon):
         assert MIN_LON <= lat_lon[1] <= MAX_LON
         assert MIN_LAT <= lat_lon[0] <= MAX_LAT
-        cdef double[2] xy_pos
-        cdef double[2] lat_lon_
-        cp2a_2d(lat_lon, lat_lon_)
-        self.lat_lon_to_xy_(xy_pos, lat_lon_)
-        return xy_pos[0], xy_pos[1]
+        cdef vec2 xy_pos = self.lat_lon_to_xy_(cp2ll(lat_lon))
+        return xy_pos.x, xy_pos.y
 
     @cython.cdivision(True)
     @cython.wraparound(False)
-    cdef void lat_lon_to_xy_(self, double[2] xy_pos, double[2] lat_lon):
+    cdef vec2 lat_lon_to_xy_(self, latlon lat_lon):
+        cdef vec2 xy_pos
         cdef double x, y
-        lat = lat_lon[0]
-        lon = lat_lon[1]
+        lat = lat_lon.lat
+        lon = lat_lon.lon
         x_ratio = lon / LON_RANGE + 0.5  # x as ratio of 0 to 1
         y_ratio = lat / LAT_RANGE + 0.5  # y as ratio from 0 to 1
         x = x_ratio * (self.width - 1)  # max index is 1 less than size
@@ -824,9 +817,9 @@ cdef class LatLonMap(TextureMap):
             # assert y > -0.01, y
             y = 0
         # store result
-        xy_pos[0] = x
-        xy_pos[1] = y
-        # no return, result is stored in passed xy_pos memory view.
+        xy_pos.x = x
+        xy_pos.y = y
+        return xy_pos
 
     @cython.cdivision(True)
     cpdef xy_to_lat_lon(self, pos):
@@ -874,22 +867,20 @@ cdef class TileMap(TextureMap):
         :param vector: Vector (x, y, z)
         :return: PixelValue
         """
-        cdef double[3] vector_
-        cp2a_3d(vector, vector_)
-        return self.v_from_vector_(vector_)
+        return self.v_from_vector_(cp2v_3d(vector))
 
     @cython.cdivision(True)
     @cython.wraparound(False)
-    cdef int v_from_vector_(self, double[3] vector) except? -1:
+    cdef int v_from_vector_(self, vec3 vector) except? -1:
         """
         Gets value associated with passed vector.
         Unlike above version, vector is a memory view, not an object.
         """
         cdef double x, y, z
-        cdef double[2] pos
-        x = vector[0]
-        y = vector[1]
-        z = vector[2]
+        cdef vec2 pos
+        x = vector.x
+        y = vector.y
+        z = vector.z
         if x == 0. and y == 0. and z == 0.:
             raise ValueError('Passed vector was (0, 0, 0)')
         if self.cube_face == 0:
@@ -917,13 +908,13 @@ cdef class TileMap(TextureMap):
                 'position outside expected range: ({},{}), tile: {}' \
                 .format(a, b, self.cube_face)
         # convert a and b from (-1,-1) range to (0,1)
-        pos[0] = a / 2 + 0.5
-        pos[1] = b / 2 + 0.5
+        pos.x = a / 2 + 0.5
+        pos.y = b / 2 + 0.5
         IF ASSERTS:
-            assert 0 <= pos[0] <= 1, \
-                'a value: {}, tile: {}'.format(pos[0], self.cube_face)
-            assert 0 <= pos[1] <= 1, \
-                'b value: {}, tile: {}'.format(pos[0], self.cube_face)
+            assert 0 <= pos.x <= 1, \
+                'a value: {}, tile: {}'.format(pos.x, self.cube_face)
+            assert 0 <= pos.y <= 1, \
+                'b value: {}, tile: {}'.format(pos.y, self.cube_face)
         v = self.v_from_rel_xy_(pos)
         IF ASSERTS:
             assert v >= 0
@@ -945,17 +936,18 @@ cdef class TileMap(TextureMap):
 
     @cython.wraparound(False)
     cpdef vector_from_xy(self, pos):
-        cdef double[3] vector
-        cdef double[2] pos_
+        cdef vec3 vector
+        cdef vec2 pos_
         # vector = np.ndarray((3), np.double)
-        pos_[0], pos_[1] = pos
-        self.vector_from_xy_(vector, pos_)
+        pos_.x, pos_.y = pos
+        vector = self.vector_from_xy_(pos_)
         return Vector(vector)
 
     @cython.cdivision(True)
     @cython.wraparound(False)
-    cdef void vector_from_xy_(self, double[3] vector, double[2] pos):
-        a_index, b_index = pos[0], pos[1]
+    cdef vec3 vector_from_xy_(self, vec2 pos) except *:
+        cdef vec3 vector
+        a_index, b_index = pos.x, pos.y
         if not 0 <= a_index <= self.width - 1:
             raise ValueError('Passed x {} was outside range 0-{}'
                              .format(a_index, self.width))
@@ -979,20 +971,20 @@ cdef class TileMap(TextureMap):
         # assert -1 <= a <= 1, a
         # assert -1 <= b <= 1, b
         if self.cube_face == 0:
-            vector[0], vector[1], vector[2] = 1, a, b
+            vector.x, vector.y, vector.z = 1, a, b
         elif self.cube_face == 1:
-            vector[0], vector[1], vector[2] = a, -1, b
+            vector.x, vector.y, vector.z = a, -1, b
         elif self.cube_face == 2:
-            vector[0], vector[1], vector[2] = -1, -a, b
+            vector.x, vector.y, vector.z = -1, -a, b
         elif self.cube_face == 3:
-            vector[0], vector[1], vector[2] = -a, 1, b
+            vector.x, vector.y, vector.z = -a, 1, b
         elif self.cube_face == 4:
-            vector[0], vector[1], vector[2] = a, b, 1
+            vector.x, vector.y, vector.z = a, b, 1
         elif self.cube_face == 5:
-            vector[0], vector[1], vector[2] = -a, b, -1
+            vector.x, vector.y, vector.z = -a, b, -1
         else:
             raise ValueError('Invalid face index: {}'.format(self.cube_face))
-        # No value returned, results are stored in passed vector.
+        return vector
 
 
 cdef class CubeSide(TileMap):
@@ -1021,30 +1013,28 @@ cdef class CubeSide(TileMap):
                     to tile origin to access.
         :return: PixelValue
         """
-        cdef double[2] pos_
-        cp2a_2d(pos, pos_)
-        return self.v_from_xy_(pos_)
+        return self.v_from_xy_(cp2v_2d(pos))
 
     @cython.wraparound(False)
-    cdef int v_from_xy_(self, double[2] pos) except? -1:
+    cdef int v_from_xy_(self, vec2 pos) except? -1:
         """
         Gets pixel value identified by vector.
         :param pos: x, y doubles indicating position relative to tile
                     origin to access.
         :return: PixelValue
         """
-        if not 0 <= pos[0] <= self.width - 1:
-            raise ValueError('x ({}) outside valid range'.format(pos[0]))
-        if not 0 <= pos[1] <= self.height - 1:
-            raise ValueError('y ({}) outside valid range'.format(pos[0]))
-        cdef double[2] viewed_map_xy
-        x = pos[0]
-        y = pos[1]
+        if not 0 <= pos.x <= self.width - 1:
+            raise ValueError('x ({}) outside valid range'.format(pos.x))
+        if not 0 <= pos.y <= self.height - 1:
+            raise ValueError('y ({}) outside valid range'.format(pos.y))
+        cdef vec2 viewed_map_xy
+        x = pos.x
+        y = pos.y
         # modify x and y to be relative to the tile's origin
         # for this cube side
         x_ref, y_ref = self.reference_position
-        viewed_map_xy[0] = x + x_ref
-        viewed_map_xy[1] = y + y_ref
+        viewed_map_xy.x = x + x_ref
+        viewed_map_xy.y = y + y_ref
         return sample(self._arr, viewed_map_xy)
 
     @property
@@ -1063,23 +1053,22 @@ cpdef vector_from_lat_lon(pos):
     :param pos: tuple(lat, lon)
     :return: Vector
     """
-    cdef double[2] pos_
-    cdef double[3] vector_
-    cp2a_2d(pos, pos_)
-    vector_from_lat_lon_(vector_, pos_)
-    return Vector((vector_[0], vector_[1], vector_[2]))
+    cdef vec3 vector_ = vector_from_lat_lon_(cp2ll(pos))
+    return Vector((vector_.x, vector_.y, vector_.z))
 
 
-cdef void vector_from_lat_lon_(double[3] vector, double[2] pos):
-    cdef double lat = pos[0], lon = pos[1]
+cdef vec3 vector_from_lat_lon_(latlon lat_lon):
+    cdef vec3 vector
+    cdef double lat = lat_lon.lat, lon = lat_lon.lon
 
     IF ASSERTS:
         assert MIN_LAT <= lat <= MAX_LAT + 1e-6, 'bad lat: {}'.format(lat)
         assert MIN_LON <= lon <= MAX_LON + 1e-6, 'bad lon: {}'.format(lon)
 
-    vector[0] = cos(lat) * cos(lon)
-    vector[1] = cos(lat) * sin(lon)
-    vector[2] = sin(lat)
+    vector.x = cos(lat) * cos(lon)
+    vector.y = cos(lat) * sin(lon)
+    vector.z = sin(lat)
+    return vector
 
 cpdef lat_lon_from_vector(vector):
     vector = Vector(vector)
@@ -1089,15 +1078,17 @@ cpdef lat_lon_from_vector(vector):
 
 
 @cython.wraparound(False)
-cdef lat_lon_from_vector_(double[2] lat_lon, double[3] vector):
-    x = vector[0]
-    y = vector[1]
-    z = vector[2]
-    lat_lon[0] = atan2(z, sqrt(pow(x, 2) + pow(y, 2)))
-    lat_lon[1] = atan2(y, x)
+cdef latlon lat_lon_from_vector_(vec3 vector):
+    cdef latlon lat_lon
+    x = vector.x
+    y = vector.y
+    z = vector.z
+    lat_lon.lat = atan2(z, sqrt(pow(x, 2) + pow(y, 2)))
+    lat_lon.lon = atan2(y, x)
+    return lat_lon
 
 
-cdef int sample(np.ndarray arr, double[2] pos) except? -1:
+cdef int sample(np.ndarray arr, vec2 pos) except? -1:
     """
     Samples passed array at passed position.
 
@@ -1113,8 +1104,8 @@ cdef int sample(np.ndarray arr, double[2] pos) except? -1:
     cdef float left0, left1, right0, right1, left, right
     cdef float a_mod, b_mod
 
-    a = pos[0]
-    b = pos[1]
+    a = pos.x
+    b = pos.y
     a_index = int(a)
     b_index = int(b)
     a_mod = a % 1

@@ -81,11 +81,13 @@ setup(
             Extension(
                 name='pyrostex.map',
                 sources=['pyrostex/map.pyx'],
+                include_dirs=['pyrostex/cmathutils'],
                 extra_compile_args=["-ffast-math", "-Ofast"]
             ),
             Extension(
                 name='pyrostex.height',
                 sources=['pyrostex/height.pyx'],
+                include_dirs=['pyrostex/cmathutils'],
                 extra_compile_args=["-ffast-math", "-Ofast"]
             ),
             Extension(

@@ -1,8 +1,10 @@
 
 from .map cimport CubeMap
+from .includes.cmathutils cimport vec2
+
 
 cdef class VectorMap(CubeMap):
-    cdef void vec_from_xy_(self, int[2] vec, double[2] pos)
+    cdef void vec_from_xy_(self, int[2] vec, vec2 pos)
     cdef set_xy_vec_(self, int[2] pos, int[2] vec)
 
     cdef inline void _v_to_2d(self, int[2] vector, int v)

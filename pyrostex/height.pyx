@@ -18,13 +18,12 @@ DEF CENTER_STORED_V = 32767
 
 
 cdef class HeightCubeMap(CubeMap):
-    cpdef float h_from_lat_lon(self, pos):
-        cdef double[2] pos_
-        cp2a_2d(pos, pos_)
-        return h_from_stored_v(self.v_from_lat_lon_(pos_))
+    cpdef float h_from_lat_lon(self, lat_lon):
+        cdef latlon lat_lon_ = cp2ll(lat_lon)
+        return h_from_stored_v(self.v_from_lat_lon_(lat_lon_))
 
-    cdef float h_from_lat_lon_(self, double[2] pos):
-        stored_v = self.v_from_lat_lon_(pos)
+    cdef float h_from_lat_lon_(self, latlon lat_lon):
+        stored_v = self.v_from_lat_lon_(lat_lon)
         return h_from_stored_v(stored_v)
 
     cpdef float h_from_xy(self, pos):
@@ -33,25 +32,21 @@ cdef class HeightCubeMap(CubeMap):
         :param pos: pos
         :return:
         """
-        cdef double[2] pos_
-        cp2a_2d(pos, pos_)
-        stored_v = self.v_from_xy_(pos_)
+        stored_v = self.v_from_xy_(cp2v_2d(pos))
         return h_from_stored_v(stored_v)
 
-    cdef float h_from_xy_(self, double[2] pos):
+    cdef float h_from_xy_(self, vec2 pos):
         stored_v = self.v_from_xy_(pos)
         return h_from_stored_v(stored_v)
 
     cpdef float h_from_rel_xy(self, tuple pos):
-        cdef double[2] pos_
-        cp2a_2d(pos, pos_)
-        stored_v = self.v_from_rel_xy_(pos_)
+        stored_v = self.v_from_rel_xy_(cp2v_2d(pos))
         return h_from_stored_v(stored_v)
 
-    cdef float h_from_rel_xy_(self, double[2] pos):
-        cdef double[2] abs_pos
-        abs_pos[0] = pos[0] * self.width
-        abs_pos[1] = pos[1] * self.height
+    cdef float h_from_rel_xy_(self, vec2 pos):
+        cdef vec2 abs_pos
+        abs_pos.x = pos.x * self.width
+        abs_pos.y = pos.y * self.height
         stored_v = self.v_from_xy_(abs_pos)
         return h_from_stored_v(stored_v)
 
@@ -61,12 +56,10 @@ cdef class HeightCubeMap(CubeMap):
         :param vector:
         :return:
         """
-        cdef double[3] vector_
-        cp2a_3d(vector, vector_)
-        stored_v = self.v_from_vector_(vector_)
+        stored_v = self.v_from_vector_(cp2v_3d(vector))
         return h_from_stored_v(stored_v)
 
-    cdef float h_from_vector_(self, double[3] vector):
+    cdef float h_from_vector_(self, vec3 vector):
         stored_v = self.v_from_vector_(vector)
         return h_from_stored_v(stored_v)
 

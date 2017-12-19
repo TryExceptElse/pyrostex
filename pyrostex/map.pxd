@@ -2,6 +2,8 @@ import numpy as np
 
 cimport numpy as np
 
+from .includes.cmathutils cimport vec2, vec3, mat3x3
+from .includes.structs cimport latlon
 
 cdef class TextureMap:
 
@@ -17,36 +19,36 @@ cdef class TextureMap:
     cpdef void set_arr(self, arr)
 
     cpdef int v_from_lat_lon(self, pos) except? -1
-    cdef int v_from_lat_lon_(self, double[2] pos) except? -1
+    cdef int v_from_lat_lon_(self, latlon pos) except? -1
     cpdef int v_from_xy(self, pos) except? -1
-    cdef int v_from_xy_(self, double[2] pos) except? -1
+    cdef int v_from_xy_(self, vec2 pos) except? -1
     cpdef int v_from_rel_xy(self, tuple pos) except? -1
-    cdef int v_from_rel_xy_(self, double[2] pos) except? -1
+    cdef int v_from_rel_xy_(self, vec2 pos) except? -1
     cdef int v_from_xy_indices_(self, int[2] pos) except? -1
     cpdef int v_from_vector(self, vector) except? -1
-    cdef int v_from_vector_(self, double[3] vector) except? -1
+    cdef int v_from_vector_(self, vec3 vector) except? -1
 
     cpdef object gradient_from_xy(self, tuple[double] pos)
-    cdef void gradient_from_xy_(self, double[2] gr, double[2] pos) except *
+    cdef vec2 gradient_from_xy_(self, vec2 pos) except *
     cdef inline void _sample_pos(
             self,
             int[2] p0,
             int[2] p1,
             int[2] p2,
             int[2] p3,
-            double[2] origin)
+            vec2 origin)
 
     cdef inline void r_px_(self, int[2] new_pos, int[2] old_pos)
     cdef inline void u_px_(self, int[2] new_pos, int[2] old_pos)
     cdef inline void ur_px_(self, int[2] new_pos, int[2] old_pos)
 
     cdef double gauss_smooth_xy_(
-            self, double[2] pos, double radius, int samples) except -1.
+            self, vec2 pos, double radius, int samples) except -1.
 
     cpdef object vector_from_xy(self, pos)
-    cdef void vector_from_xy_(self, double[3] vector, double[2] pos)
+    cdef vec3 vector_from_xy_(self, vec2 pos) except *
     cpdef tuple lat_lon_from_xy(self, tuple pos)
-    cdef void lat_lon_from_xy_(self, double[2] lat_lon, double[2] xy_pos)
+    cdef latlon lat_lon_from_xy_(self, vec2 xy_pos) except *
     cpdef void set_xy(self, pos, int v)
     cdef void set_xy_(self, int[2] pos, int v)
     cpdef void write_png(self, unicode out)
@@ -65,20 +67,17 @@ cdef class CubeMap(TextureMap):
     cpdef int v_from_xy(self, pos, tile=?) except? -1
     cpdef CubeSide get_tile(self, int index)
     cpdef CubeSide tile_from_lat_lon(self, pos)
-    cdef CubeSide tile_from_lat_lon_(self, double[2] pos)
+    cdef CubeSide tile_from_lat_lon_(self, latlon pos)
     cpdef CubeSide tile_from_xy(self, pos)
-    cdef CubeSide _tile_from_xy(self, double[2] pos)
+    cdef CubeSide tile_from_xy_(self, vec2 pos)
     cpdef CubeSide tile_from_vector(self, vector)
-    cdef CubeSide tile_from_vector_(self, double[3] vector)
-    cdef int tile_index_from_vector_(self, double[3] vector)
-    cdef short tile_index_from_xy_(self, double[2] pos)
-    cdef void vector_from_tile_xy_(
-            self,
-            double[3] vector,
-            int tile_index,
-            double[2] pos)
+    cdef CubeSide tile_from_vector_(self, vec3 vector)
+    cdef int tile_index_from_vector_(self, vec3 vector)
+    cpdef short tile_index_from_xy(self, pos)
+    cdef short tile_index_from_xy_(self, vec2 pos)
+    cdef vec3 vector_from_tile_xy_(self, int tile_index, vec2 pos) except *
     cpdef get_reference_position(self, tile_index)
-    cdef void reference_position_(self, double[2] ref_pos, int tile_index)
+    cdef vec2 reference_position_(self, int tile_index) except *
 
 
 cdef class LatLonMap(TextureMap):
@@ -86,7 +85,7 @@ cdef class LatLonMap(TextureMap):
     Stores a latitude-longitude texture map
     """
     cpdef lat_lon_to_xy(self, lat_lon)
-    cdef void lat_lon_to_xy_(self, double[2] xy_pos, double[2] lat_lon)
+    cdef vec2 lat_lon_to_xy_(self, latlon lat_lon)
     cpdef xy_to_lat_lon(self, pos)
 
 
@@ -110,5 +109,5 @@ cdef class CubeSide(TileMap):
 
 cpdef vector_from_lat_lon(pos)
 cpdef lat_lon_from_vector(vector)
-cdef lat_lon_from_vector_(double[2] lat_lon, double[3] vector)
-cdef int sample(np.ndarray arr, double[2] pos) except? -1
+cdef latlon lat_lon_from_vector_(vec3 vector)
+cdef int sample(np.ndarray arr, vec2 pos) except? -1

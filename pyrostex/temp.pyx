@@ -33,30 +33,27 @@ DEF BASE_H_VAL = 32767
 cdef class TMap(CubeMap):
 
     cpdef float t_from_lat_lon(self, pos) except? -1:
-        cdef double[2] pos_
-        cp2a_2d(pos, pos_)
-        return t_from_stored_v(self.v_from_lat_lon_(pos_))
+        return t_from_stored_v(self.v_from_lat_lon_(cp2ll(pos)))
 
-    cdef float t_from_lat_lon_(self, double[2] pos) except? -1:
-        return t_from_stored_v(self.v_from_lat_lon_(pos))
+    cdef float t_from_lat_lon_(self, latlon lat_lon) except? -1:
+        return t_from_stored_v(self.v_from_lat_lon_(lat_lon))
 
     cpdef float t_from_xy(self, pos) except? -1:
-        cdef double[2] pos_
-        cp2a_2d(pos, pos_)
-        stored_v = self.v_from_xy_(pos_)
+        # copy python object values to vec2 and call v_from_xy_
+        stored_v = self.v_from_xy_(cp2v_2d(pos))
         return t_from_stored_v(stored_v)
 
-    cdef float t_from_xy_(self, double[2] pos) except? -1:
+    cdef float t_from_xy_(self, vec2 pos) except? -1:
         stored_v = self.v_from_xy_(pos)
         return t_from_stored_v(stored_v)
 
     cpdef float t_from_vector(self, vector) except? -1:
-        cdef double[3] vector_
-        cp2a_3d(vector, vector_)
-        stored_v = self.v_from_vector_(vector_)
+        # convert py object to vec3 and get stored value
+        stored_v = self.v_from_vector_(cp2v_3d(vector))
+        # convert stored value to temperature and return
         return t_from_stored_v(stored_v)
 
-    cdef float t_from_vector_(self, double[3] vector) except? -1:
+    cdef float t_from_vector_(self, vec3 vector) except? -1:
         stored_v = self.v_from_vector_(vector)
         return t_from_stored_v(stored_v)
 
@@ -85,9 +82,9 @@ cpdef TMap make_warming_map(
     at any given position.
     """
     cdef int x, y
-    cdef double[2] xy_pos
-    cdef double[2] src_xy
-    cdef double[2] lat_lon
+    cdef vec2 xy_pos
+    cdef vec2 src_xy
+    cdef latlon lat_lon
     cdef int[2] xy_int_pos
     cdef float t
 
@@ -102,19 +99,19 @@ cpdef TMap make_warming_map(
     if not 0 <= no_atm_temp <= MAX_T:
         assert False, no_atm_temp  # sanity check
     for x in range(width):
-        xy_pos[0] = x
+        xy_pos.x = x
         xy_int_pos[0] = x
-        src_xy[0] = xy_pos[0] / width * height_map.width
+        src_xy.x = xy_pos.x / width * height_map.width
         for y in range(height):
             # get lat of position
-            xy_pos[1] = y
+            xy_pos.y = y
             xy_int_pos[1] = y
-            src_xy[1] = xy_pos[1] / height * height_map.height
+            src_xy.y = xy_pos.y / height * height_map.height
 
             h = height_map.v_from_xy_(src_xy) - BASE_H_VAL
-            height_map.lat_lon_from_xy_(lat_lon, src_xy)
+            lat_lon = height_map.lat_lon_from_xy_(src_xy)
             # calculate temperature for position as it would be without atm
-            t = find_cs_ratio(lat_lon[0]) * no_atm_temp
+            t = find_cs_ratio(lat_lon.lat) * no_atm_temp
             if not 0 <= t <= MAX_T:
                 assert False, t  # sanity check
             # apply effects of elevation

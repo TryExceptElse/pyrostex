@@ -49,24 +49,24 @@ DEF WIND_TO_INT_CONVERSION = 8  # lets speeds up to ~4000m/s be stored
 
 cdef class WindMap(VectorMap):
 
-    cdef void set_xy_wind_(WindMap self, int[2] pos, float[2] wind_vec):
+    cdef void set_xy_wind_(WindMap self, int[2] pos, vec2 wind_vec):
         cdef int[2] int_vec
         self._wind_to_int_vec(int_vec, wind_vec)
         self.set_xy_vec_(pos, int_vec)
 
-    cdef void wind_from_xy_(self, float[2] wind_vec, double[2] pos):
+    cdef void wind_from_xy_(self, vec2 wind_vec, vec2 pos):
         cdef int[2] int_vec
         self.vec_from_xy_(int_vec, pos)
         self._int_vec_to_wind(wind_vec, int_vec)
 
-    cdef inline void _wind_to_int_vec(self, int[2] int_vec, float[2] wind_vec):
-        int_vec[0] = int(wind_vec[0] * WIND_TO_INT_CONVERSION)
-        int_vec[1] = int(wind_vec[1] * WIND_TO_INT_CONVERSION)
+    cdef inline void _wind_to_int_vec(self, int[2] int_vec, vec2 wind_vec):
+        int_vec[0] = int(wind_vec.x * WIND_TO_INT_CONVERSION)
+        int_vec[1] = int(wind_vec.y * WIND_TO_INT_CONVERSION)
 
     @cython.cdivision(True)
-    cdef inline void _int_vec_to_wind(self, float[2] wind_vec, int[2] int_vec):
-        wind_vec[0] = int_vec[0] / WIND_TO_INT_CONVERSION
-        wind_vec[1] = int_vec[1] / WIND_TO_INT_CONVERSION
+    cdef inline void _int_vec_to_wind(self, vec2 wind_vec, int[2] int_vec):
+        wind_vec.x = int_vec[0] / WIND_TO_INT_CONVERSION
+        wind_vec.y = int_vec[1] / WIND_TO_INT_CONVERSION
 
 
 cpdef WindMap make_wind_map(
@@ -114,17 +114,17 @@ cdef CubeMap _make_noise_map(
         t0 = time()
 
     cdef int[2] pos
-    cdef double[2] dbl_pos
-    cdef double[3] vec
+    cdef vec2 dbl_pos
+    cdef vec3 vec
     cdef int v
     for x in range(width):
         pos[0] = x
-        dbl_pos[0] = x
+        dbl_pos.x = x
         for y in range(height):
             pos[1] = y
-            dbl_pos[1] = y
-            noise_map.vector_from_xy_(vec, dbl_pos)
-            v = int(n.get_simplex_fractal_3d(vec[0], vec[1], vec[2]) *
+            dbl_pos.y = y
+            vec = noise_map.vector_from_xy_(dbl_pos)
+            v = int(n.get_simplex_fractal_3d(vec.x, vec.y, vec.z) *
                     NOISE_SCALE + MEAN_NOISE_V)
             noise_map.set_xy_(pos, v)
 
@@ -150,7 +150,7 @@ cdef CubeMap _make_pressure_map(TMap warming_map):
     cdef int width = warming_map.width, height = warming_map.height
     cdef int x, y  # iterated x and y values
     cdef int[2] int_pos  # stores x, y position indices
-    cdef double[2] dbl_pos  # stores position as dbl (prevents repeated casts)
+    cdef vec2 dbl_pos  # stores position as dbl (prevents repeated casts)
     cdef double v  # stores retrieved, smoothed value
 
     IF DEBUG:
@@ -162,10 +162,10 @@ cdef CubeMap _make_pressure_map(TMap warming_map):
 
     for x in range(width):
         int_pos[0] = x
-        dbl_pos[0] = x
+        dbl_pos.x = x
         for y in range(height):
             int_pos[1] = y
-            dbl_pos[1] = y
+            dbl_pos.y = y
 
             # get smoothed value from warming_map
             v = warming_map.gauss_smooth_xy_(
