@@ -1,6 +1,6 @@
 
 
-cdef inline void cp2a_2d(tuple t, double[2] a):
+cdef inline void cp2a_2d(t, double[2] a):
     """
     Copy to array 2 doubles
     """
@@ -8,7 +8,7 @@ cdef inline void cp2a_2d(tuple t, double[2] a):
     a[1] = t[1]
 
 
-cdef inline void cp2a_3d(tuple t, double[3] a):
+cdef inline void cp2a_3d(t, double[3] a):
     """
     Copy to array 3 doubles
     """

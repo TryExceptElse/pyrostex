@@ -91,7 +91,8 @@ class Spheroid:
     def build(self):
         self.height_map = self.make_height_cube_map()
         self.warming_map = self.make_warming_map()
-        self.wind_map = self.make_wind_map()
+        if self.surface_pressure > 0.01:
+            self.wind_map = self.make_wind_map()
         self.temp_map = self.make_temp_map()
         self.tex_map = self.make_tex_map()
 
@@ -105,8 +106,7 @@ class Spheroid:
 
     def make_height_arr(self):
         """
-        Converts base height map into grey-scale png.
-        Created grey-scale png file is located within own dir.
+        Converts base height map into grey-scale npy arr.
         :return: None
         """
         base_map_path = os.path.join(
@@ -136,9 +136,9 @@ class Spheroid:
         initial_dir = os.curdir
         os.chdir(settings.PLANET_GEN_DIR)
         base_map_path = os.path.join(self.dir_path, BASE_MAP_NAME)
-        # for some unfathomable reason,
-        # subprocess breaks when this command is run
-        # it seems to only apply a select few of the arguments passed
+        # For some unfathomable reason,
+        # subprocess breaks when this command is run.
+        # It seems to only apply a select few of the arguments passed.
         os.system(
             './planet -o {out} '
             '-pprojection=q '

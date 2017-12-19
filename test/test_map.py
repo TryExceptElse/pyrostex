@@ -41,6 +41,88 @@ class TestCubeMap(TestCase):
         i = m.tile_from_xy((1535, 1023))
         self.assertEqual(5, i.cube_face)
 
+    def test_tile_from_lat_lon_returns_correctly_near_tile_5_edge(self):
+        m = CubeMap(width=1536, height=1024)
+        i = m.tile_from_lat_lon((radians(40), -radians(50))).cube_face
+        self.assertEqual(4, i)
+
+    def test_tile_from_lat_lon_returns_correctly_center_tile_0(self):
+        m = CubeMap(width=1536, height=1024)
+        i = m.tile_from_lat_lon((radians(4), -radians(10))).cube_face
+        self.assertEqual(0, i)
+
+    def test_tile_from_lat_lon_returns_correctly_center_tile_1(self):
+        m = CubeMap(width=1536, height=1024)
+        i = m.tile_from_lat_lon((radians(4), -radians(90))).cube_face
+        self.assertEqual(1, i)
+
+    def test_tile_from_lat_lon_returns_correctly_center_tile_2(self):
+        m = CubeMap(width=1536, height=1024)
+        i = m.tile_from_lat_lon((radians(4), -radians(180))).cube_face
+        self.assertEqual(2, i)
+
+    def test_tile_from_lat_lon_returns_correctly_center_tile_3(self):
+        m = CubeMap(width=1536, height=1024)
+        i = m.tile_from_lat_lon((radians(4), radians(90))).cube_face
+        self.assertEqual(3, i)
+
+    def test_tile_from_lat_lon_returns_correctly_center_tile_4(self):
+        m = CubeMap(width=1536, height=1024)
+        i = m.tile_from_lat_lon((radians(90), -radians(-110))).cube_face
+        self.assertEqual(4, i)
+
+    def test_tile_from_lat_lon_returns_correctly_near_center_tile_4(self):
+        m = CubeMap(width=1536, height=1024)
+        i = m.tile_from_lat_lon((radians(85), radians(0))).cube_face
+        self.assertEqual(4, i)
+
+    def test_tile_from_lat_lon_returns_correctly_center_tile_5(self):
+        m = CubeMap(width=1536, height=1024)
+        i = m.tile_from_lat_lon((radians(-80), -radians(-40))).cube_face
+        self.assertEqual(5, i)
+
+    def test_vector_from_xy_returns_approximately_correct_value_in_tile0(self):
+        m = CubeMap(width=1536, height=1024)
+        vec = m.vector_from_xy((256, 256))
+        self.assertGreater(vec.x, 0.99)
+        self.assertTrue(-0.01 < vec.y < 0.01, vec.y)
+        self.assertTrue(-0.01 < vec.z < 0.01, vec.z)
+
+    def test_vector_from_xy_returns_approximately_correct_value_in_tile1(self):
+        m = CubeMap(width=1536, height=1024)
+        vec = m.vector_from_xy((768, 256))
+        self.assertTrue(-0.01 < vec.x < 0.01, vec.x)
+        self.assertLess(vec.y, -0.99)
+        self.assertTrue(-0.01 < vec.z < 0.01, vec.z)
+
+    def test_vector_from_xy_returns_approximately_correct_value_in_tile2(self):
+        m = CubeMap(width=1536, height=1024)
+        vec = m.vector_from_xy((1280, 256))
+        self.assertLess(vec.x, -0.99)
+        self.assertTrue(-0.01 < vec.y < 0.01, vec.y)
+        self.assertTrue(-0.01 < vec.z < 0.01, vec.z)
+
+    def test_vector_from_xy_returns_approximately_correct_value_in_tile3(self):
+        m = CubeMap(width=1536, height=1024)
+        vec = m.vector_from_xy((256, 768))
+        self.assertTrue(-0.01 < vec.x < 0.01)
+        self.assertGreater(vec.y, 0.99)
+        self.assertTrue(-0.01 < vec.z < 0.01)
+
+    def test_vector_from_xy_returns_approximately_correct_value_in_tile4(self):
+        m = CubeMap(width=1536, height=1024)
+        vec = m.vector_from_xy((768, 768))
+        self.assertTrue(-0.01 < vec.x < 0.01)
+        self.assertTrue(-0.01 < vec.y < 0.01)
+        self.assertGreater(vec.z, 0.99)
+
+    def test_vector_from_xy_returns_approximately_correct_value_in_tile5(self):
+        m = CubeMap(width=1536, height=1024)
+        vec = m.vector_from_xy((1280, 768))
+        self.assertTrue(-0.01 < vec.x < 0.01)
+        self.assertTrue(-0.01 < vec.y < 0.01)
+        self.assertLess(vec.z, -0.99)
+
 
 class TestLatLonMap(TestCase):
     def test_lat_lon_to_xy_returns_correct_value_at_edge(self):

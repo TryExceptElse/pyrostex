@@ -9,13 +9,13 @@ def make_sample_spheroid():
     print('creating spheroid')
     start_t = time()
     spheroid = Spheroid(
-        124,
-        'rock',
-        1e26,
-        220,
-        5e6,
-        0.5,
-        0.1,
+        124,  # seed
+        'rock',  # type
+        1e26,  # mass
+        220,  # mean temp
+        5e6,  # radius
+        0.5,  # gravities
+        0.1,  # atm
         dir_path=spheroid_dir
     )
     end_t = time()

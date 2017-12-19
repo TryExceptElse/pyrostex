@@ -4,6 +4,11 @@
 Module containing a cube map that stores 2d surface vectors
 """
 
+include "flags.pxi"
+
+import numpy as np
+cimport numpy as np
+
 cimport cython
 
 from .map cimport CubeMap
@@ -13,7 +18,17 @@ DEF HALF_UINT16 = 32768
 
 
 cdef class VectorMap(CubeMap):
-    cdef int v_from_xy_(self, double[2] pos):
+    def __init__(self, **kwargs):
+        # check that data type is usable
+        data_type = kwargs.get('data_type', None)
+        if data_type is None:
+            kwargs['data_type'] = np.uint32
+        elif data_type != np.uint32:
+            raise ValueError('Vector map must store values of uint32.'
+                             'Got: {}'.format(kwargs['data_type']))
+        super(VectorMap, self).__init__(**kwargs)
+
+    cdef int v_from_xy_(self, double[2] pos) except? -1:
         cdef int[2] vec
         self.vec_from_xy_(vec, pos)
         return self._2d_to_v(vec)
@@ -45,16 +60,19 @@ cdef class VectorMap(CubeMap):
         else:
             a0 = int(a)
             a1 = int(a) + 1
-            # assert a1 < self.width
+            IF ASSERTS:
+                assert a1 < self.width
         if b_mod == 0.:
             b0 = int(b)
             b1 = -1
         else:
             b0 = int(b)
             b1 = int(b) + 1
-            # assert b1 < self.height
-        # assert a0 < self.width
-        # assert b0 < self.height
+            IF ASSERTS:
+                assert b1 < self.height
+        IF ASSERTS:
+            assert a0 < self.width
+            assert b0 < self.height
 
         if b1 == -1 and a1 == -1:
             # if both passed values are whole numbers, just get the

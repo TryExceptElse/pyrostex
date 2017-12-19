@@ -32,31 +32,31 @@ DEF BASE_H_VAL = 32767
 
 cdef class TMap(CubeMap):
 
-    cpdef float t_from_lat_lon(self, pos):
+    cpdef float t_from_lat_lon(self, pos) except? -1:
         cdef double[2] pos_
         cp2a_2d(pos, pos_)
         return t_from_stored_v(self.v_from_lat_lon_(pos_))
 
-    cdef float t_from_lat_lon_(self, double[2] pos):
+    cdef float t_from_lat_lon_(self, double[2] pos) except? -1:
         return t_from_stored_v(self.v_from_lat_lon_(pos))
 
-    cpdef float t_from_xy(self, pos):
+    cpdef float t_from_xy(self, pos) except? -1:
         cdef double[2] pos_
         cp2a_2d(pos, pos_)
         stored_v = self.v_from_xy_(pos_)
         return t_from_stored_v(stored_v)
 
-    cdef float t_from_xy_(self, double[2] pos):
+    cdef float t_from_xy_(self, double[2] pos) except? -1:
         stored_v = self.v_from_xy_(pos)
         return t_from_stored_v(stored_v)
 
-    cpdef float t_from_vector(self, vector):
+    cpdef float t_from_vector(self, vector) except? -1:
         cdef double[3] vector_
         cp2a_3d(vector, vector_)
         stored_v = self.v_from_vector_(vector_)
         return t_from_stored_v(stored_v)
 
-    cdef float t_from_vector_(self, double[3] vector):
+    cdef float t_from_vector_(self, double[3] vector) except? -1:
         stored_v = self.v_from_vector_(vector)
         return t_from_stored_v(stored_v)
 
@@ -70,48 +70,6 @@ cdef class TMap(CubeMap):
     cdef void set_xy_t_(self, int[2] pos, float t):
         stored_v = stored_v_from_t(t)
         self.set_xy_(pos, stored_v)
-
-    @cython.cdivision(True)
-    @cython.wraparound(False)
-    cpdef void write_png(self, unicode out):
-        """
-        Writes map as a png to the passed path.
-        :param out: path String
-        :return: None
-        """
-        cdef int max = 64
-        cdef int x, y, v
-        cdef np.ndarray row, out_arr
-        if '.' not in out:
-            out += '.png'  # adjust out path
-        while True:
-            # try to get array to print. if a value is outside range,
-            # start over and increase max.
-            # this lets us see a map that is scaled to fit the t range
-            # of a planet.
-            restart = False  # reset flag
-            out_arr = np.empty_like(self._arr, np.uint8)
-            for y in range(self.height):
-                row = self._arr[y]
-                for x in range(self.width):
-                    v = row[x]
-                    if v > max:
-                        # increase max
-                        max = 2 ** int(ceil(log2(v)))
-                        # awkwardly use flag to break nested loop
-                        restart = True
-                        break
-                    out_arr[y][x] = v * 255 / max
-                if restart:
-                    break
-            if not restart:
-                break
-
-        with open(out, 'wb') as f:
-            height = len(out_arr)
-            width = len(out_arr[0])
-            w = png.Writer(width, height, greyscale=True)
-            w.write(f, out_arr)
 
 cpdef TMap make_warming_map(
         HeightCubeMap height_map,

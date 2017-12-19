@@ -1,4 +1,4 @@
-from unittest import TestCase
+from unittest import TestCase, skip
 
 from pyrostex.procede import Spheroid
 
@@ -6,7 +6,7 @@ from settings import ROOT_PATH
 
 
 class TestSpheroid(TestCase):
-
+    @skip
     def test_spheroid_can_be_instantiated(self):
         spheroid_dir = ROOT_PATH + '/test/resources/out/test_spheroid'
         spheroid = Spheroid(
