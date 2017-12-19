@@ -4,7 +4,7 @@ from math import radians
 from mathutils import Vector
 
 from pyrostex import map
-from pyrostex.map import LatLonMap, CubeMap
+from pyrostex.map import LatLonMap, CubeMap, CubeSide
 
 
 class TestCubeMap(TestCase):
@@ -136,6 +136,50 @@ class TestLatLonMap(TestCase):
         x, y = m.lat_lon_to_xy((radians(-90), radians(-180)))
         self.assertEqual(0, y)
         self.assertEqual(0, x)
+
+
+class TestCubeSide(TestCase):
+    def test_reference_positions_returns_correct_value_for_tile0(self):
+        cm = CubeMap(width=1536, height=1024)
+        m = cm.get_tile(0)
+        ref_pos = m.reference_position
+        self.assertEqual(0, ref_pos[0])
+        self.assertEqual(0, ref_pos[1])
+
+    def test_reference_positions_returns_correct_value_for_tile1(self):
+        cm = CubeMap(width=1536, height=1024)
+        m = cm.get_tile(1)
+        ref_pos = m.reference_position
+        self.assertEqual(512, ref_pos[0])
+        self.assertEqual(0, ref_pos[1])
+
+    def test_reference_positions_returns_correct_value_for_tile2(self):
+        cm = CubeMap(width=1536, height=1024)
+        m = cm.get_tile(2)
+        ref_pos = m.reference_position
+        self.assertEqual(1024, ref_pos[0])
+        self.assertEqual(0, ref_pos[1])
+
+    def test_reference_positions_returns_correct_value_for_tile3(self):
+        cm = CubeMap(width=1536, height=1024)
+        m = cm.get_tile(3)
+        ref_pos = m.reference_position
+        self.assertEqual(0, ref_pos[0])
+        self.assertEqual(512, ref_pos[1])
+
+    def test_reference_positions_returns_correct_value_for_tile4(self):
+        cm = CubeMap(width=1536, height=1024)
+        m = cm.get_tile(4)
+        ref_pos = m.reference_position
+        self.assertEqual(512, ref_pos[0])
+        self.assertEqual(512, ref_pos[1])
+
+    def test_reference_positions_returns_correct_value_for_tile5(self):
+        cm = CubeMap(width=1536, height=1024)
+        m = cm.get_tile(5)
+        ref_pos = m.reference_position
+        self.assertEqual(1024, ref_pos[0])
+        self.assertEqual(512, ref_pos[1])
 
 
 class TestFunctions(TestCase):
