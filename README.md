@@ -6,13 +6,13 @@ intended for use with procedural planet generation
 
 
 ### Building:
-    run setup.py build_ext inplace to build cython extensions
+run setup.py build_ext inplace to build cython extensions
 
-    code: python3 setup.py build_ext --inplace
+    python3 setup.py build_ext --inplace
 
-    asserts can be built by passing '--asserts' to setup.py
+asserts can be built by passing '--asserts' to setup.py
 
-    code: python3 setup.py build_ext --inplace --asserts
+    python3 setup.py build_ext --inplace --asserts
 
-### Test Usage
+### Test Usage:
 run sample.py
