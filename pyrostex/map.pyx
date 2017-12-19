@@ -4,6 +4,11 @@
 Maps for storing data about a map for a sphere.
 """
 
+# Note on method naming convention:
+#   methods ending in underscore (ex: TextureMap.v_from_lat_lon_)
+#   are methods that are meant to be called from c, and accept
+#   c - specific arguments, such as memory views.
+
 # todo:
 #   successfully generate pressure map
 #   refactor to use memory view of floats instead of np array
@@ -43,6 +48,7 @@ DEF GAUSS_SAMPLES = 4
 cdef class TextureMap:
     """
     Abstract map
+    Extended by CubeMap, LatLonMap, and TileMap
     """
 
     def __init__(self, **kwargs):
@@ -500,7 +506,7 @@ cdef class CubeMap(TextureMap):
         """
         lat_lon = lat_lon_from_vector(vector)
         tile = self.tile_from_lat_lon(lat_lon)
-        tile.v_from_vector(vector)
+        return tile.v_from_vector(vector)
 
     cpdef int v_from_xy(self, pos, tile=None) except? -1:
         """
@@ -992,8 +998,8 @@ cdef class TileMap(TextureMap):
         else:
             raise ValueError('Invalid face index: {}'.format(self.cube_face))
         # No value returned, results are stored in passed vector.
-    
-    
+
+
 cdef class CubeSide(TileMap):
     
     def __init__(self, cube_face, cube_arr):
@@ -1006,8 +1012,12 @@ cdef class CubeSide(TileMap):
         cube_map_shape = self._arr.shape
         self.height = int(cube_map_shape[0] / 2)
         self.width = int(cube_map_shape[1] / 3)
-        assert self.height == cube_map_shape[0] / 2
-        assert self.width == cube_map_shape[1] / 3
+        if not self.height == cube_map_shape[0] / 2:
+            raise ValueError("height: {} is not evenly divisible into 2 parts"
+                             .format(self.height))
+        if not self.width == cube_map_shape[1] / 3:
+            raise ValueError("width: {} is not evenly divisible into 3 parts"
+                             .format(self.width))
 
     @cython.wraparound(False)
     cpdef int v_from_xy(self, pos) except? -1:
