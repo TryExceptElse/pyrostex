@@ -138,7 +138,7 @@ cdef CubeMap _make_noise_map(
 
 
 DEF GAUSS_SAMPLES = 8  # for both x and y; total of n^2 samples taken
-DEF GAUSS_RADIUS = 16.
+DEF GAUSS_RADIUS = 32.
 
 
 cdef CubeMap _make_pressure_map(TMap warming_map):

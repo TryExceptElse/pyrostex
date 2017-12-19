@@ -78,8 +78,10 @@ cdef class TextureMap:
             data_type = kwargs.get('data_type', np.uint8)
             self.set_arr(self.make_arr(width, height, data_type))
 
-        assert self.width, self.width
-        assert self.height, self.height
+        if not self.width > 0:
+            raise ValueError('Invalid width: {}'.format(self.width))
+        if not self.height > 0:
+            raise ValueError('Invalid height: {}'.format(self.height))
 
     cpdef np.ndarray load_arr(self, unicode path):
         """
@@ -196,76 +198,11 @@ cdef class TextureMap:
         :param pos: pos
         :return: int
         """
-        cdef int a_index, b_index, vf
-        cdef int[2] p0, p1, p2, p3
-        cdef float left0, left1, right0, right1, left, right
-        cdef float a_mod, b_mod
-
-        a = pos[0]
-        b = pos[1]
-        a_index = int(a)
-        b_index = int(b)
-        # check that a is between 0 and width, inclusive
-        if not 0 <= a <= self.width:
-            raise ValueError(
-                '{} outside width range 0 - {}'.format(a, self.width))
-        # check that a is between 0 and width, inclusive
-        if not 0 <= b <= self.height:
-            raise ValueError(
-                '{} outside height range 0 - {}'.format(b, self.height))
-        a_mod = a % 1
-        b_mod = b % 1
-
-        if a_mod and b_mod:
-            # if all 4 pixels are to be used
-            p2[0] = a_index
-            p2[1] = b_index
-            self.r_px_(p3, p2)
-            self.u_px_(p1, p2)
-            self.ur_px_(p0, p2)
-
-            left0 = self._arr[p2[1]][p2[0]]
-            left1 = self._arr[p1[1]][p1[0]]
-            right0 = self._arr[p3[1]][p3[0]]
-            # right1 is accessed only if it exists.
-
-            IF ASSERTS:
-                assert p0[0] >= 0 or p0[0] == -1, p0[0]
-                assert p0[1] >= 0 or p0[1] == -1, p0[1]
-
-            if p0[0] != -1:
-                # if p0 exists
-                right1 = self._arr[p0[1]][p0[0]]
-            else:
-                # if no fourth position exists,
-                # for example: the position is on a corner
-                right1 = (right0 + left1) / 2
-
-            left0 = left1 * b_mod + left0 * (1 - b_mod)
-            right0 = right1 * b_mod + right0 * (1 - b_mod)
-            vf = int(right0 * a_mod + left0 * (1 - a_mod))
-        elif a_mod:  # if a_mod > 0 and b_mod == 0:
-            # if only one row
-            p2[0] = a_index
-            p2[1] = b_index
-            self.r_px_(p3, p2)
-            left0 = self._arr[p2[1]][p2[0]]
-            right0 = self._arr[p3[1]][p3[0]]
-            vf = int(right0 * a_mod + left0 * (1 - a_mod))
-        elif b_mod:  # if b_mod > 0 and a_mod == 0:
-            # if only one column
-            p2[0] = a_index
-            p2[1] = b_index
-            self.u_px_(p1, p2)  # get pixel above base (p2) pixel
-            left0 = self._arr[p2[1]][p2[0]]
-            left1 = self._arr[p1[1]][p1[1]]
-            vf = int(left1 * b_mod + left0 * (1 - b_mod))
-        else:  # both a_mod and b_mod are 0.:
-            # if both passed values are whole numbers, just get the
-            # corresponding value
-            vf = int(self._arr[b_index][a_index])  # may store shorts, etc
-
-        return vf
+        if not 0 <= pos[0] <= self.width - 1:
+            raise ValueError('x ({}) outside valid range'.format(pos[0]))
+        if not 0 <= pos[1] <= self.height - 1:
+            raise ValueError('y ({}) outside valid range'.format(pos[0]))
+        return sample(self._arr, pos)
 
     cpdef int v_from_rel_xy(self, tuple pos) except? -1:
         """
@@ -946,7 +883,7 @@ cdef class TileMap(TextureMap):
     cdef int v_from_vector_(self, double[3] vector) except? -1:
         """
         Gets value associated with passed vector.
-        Unlike above version, vector is a memoryview, not an object.
+        Unlike above version, vector is a memory view, not an object.
         """
         cdef double x, y, z
         cdef double[2] pos
@@ -1077,21 +1014,38 @@ cdef class CubeSide(TileMap):
             raise ValueError("width: {} is not evenly divisible into 3 parts"
                              .format(self.width))
 
-    @cython.wraparound(False)
     cpdef int v_from_xy(self, pos) except? -1:
         """
         Gets pixel value identified by vector.
-        :param pos: map x, y position to access
+        :param pos: x, y floats or Vector indicating position relative
+                    to tile origin to access.
         :return: PixelValue
         """
+        cdef double[2] pos_
+        cp2a_2d(pos, pos_)
+        return self.v_from_xy_(pos_)
+
+    @cython.wraparound(False)
+    cdef int v_from_xy_(self, double[2] pos) except? -1:
+        """
+        Gets pixel value identified by vector.
+        :param pos: x, y doubles indicating position relative to tile
+                    origin to access.
+        :return: PixelValue
+        """
+        if not 0 <= pos[0] <= self.width - 1:
+            raise ValueError('x ({}) outside valid range'.format(pos[0]))
+        if not 0 <= pos[1] <= self.height - 1:
+            raise ValueError('y ({}) outside valid range'.format(pos[0]))
         cdef double[2] viewed_map_xy
-        x, y = pos
-        # modify x and y to be relative to the reference point
+        x = pos[0]
+        y = pos[1]
+        # modify x and y to be relative to the tile's origin
         # for this cube side
         x_ref, y_ref = self.reference_position
         viewed_map_xy[0] = x + x_ref
         viewed_map_xy[1] = y + y_ref
-        return super(CubeSide, self).v_from_xy_(viewed_map_xy)
+        return sample(self._arr, viewed_map_xy)
 
     @property
     def reference_position(self):  # todo: calculate only once
@@ -1141,3 +1095,83 @@ cdef lat_lon_from_vector_(double[2] lat_lon, double[3] vector):
     z = vector[2]
     lat_lon[0] = atan2(z, sqrt(pow(x, 2) + pow(y, 2)))
     lat_lon[1] = atan2(y, x)
+
+
+cdef int sample(np.ndarray arr, double[2] pos) except? -1:
+    """
+    Samples passed array at passed position.
+
+    Passed x and y positions may be values other than an integer,
+    in which case the returned value will be a weighted average of
+    the surrounding positions in the array.
+    :param arr np.ndarray
+    :param pos vec2 indicating x, y position at which to sample array.
+    :return int
+    """
+    cdef int a_index, b_index, vf
+    cdef int[2] p0, p1, p2, p3
+    cdef float left0, left1, right0, right1, left, right
+    cdef float a_mod, b_mod
+
+    a = pos[0]
+    b = pos[1]
+    a_index = int(a)
+    b_index = int(b)
+    a_mod = a % 1
+    b_mod = b % 1
+
+    if a_mod and b_mod:
+        # if all 4 pixels are to be used
+        p2[0] = a_index
+        p2[1] = b_index
+        p3[0] = p2[0] + 1
+        p3[1] = p2[1]
+        p1[0] = p2[0]
+        p1[1] = p2[1] + 1
+        p0[0] = p2[0] + 1
+        p0[1] = p2[1] + 1
+
+        left0 = arr[p2[1]][p2[0]]
+        left1 = arr[p1[1]][p1[0]]
+        right0 = arr[p3[1]][p3[0]]
+        # right1 is accessed only if it exists.
+
+        IF ASSERTS:
+            assert p0[0] >= 0 or p0[0] == -1, p0[0]
+            assert p0[1] >= 0 or p0[1] == -1, p0[1]
+
+        if p0[0] != -1:
+            # if p0 exists
+            right1 = arr[p0[1]][p0[0]]
+        else:
+            # if no fourth position exists,
+            # for example: the position is on a corner
+            right1 = (right0 + left1) / 2
+
+        left0 = left1 * b_mod + left0 * (1 - b_mod)
+        right0 = right1 * b_mod + right0 * (1 - b_mod)
+        vf = int(right0 * a_mod + left0 * (1 - a_mod))
+    elif a_mod:  # if a_mod > 0 and b_mod == 0:
+        # if only one row
+        p2[0] = a_index
+        p2[1] = b_index
+        p3[0] = p2[0] + 1
+        p3[1] = p2[1]
+        left0 = arr[p2[1]][p2[0]]
+        right0 = arr[p3[1]][p3[0]]
+        vf = int(right0 * a_mod + left0 * (1 - a_mod))
+    elif b_mod:  # if b_mod > 0 and a_mod == 0:
+        # if only one column
+        p2[0] = a_index
+        p2[1] = b_index
+        p1[0] = p2[0]  # get pixel above base (p2) pixel
+        p1[1] = p2[1] + 1
+        left0 = arr[p2[1]][p2[0]]
+        left1 = arr[p1[1]][p1[1]]
+        vf = int(left1 * b_mod + left0 * (1 - b_mod))
+    else:  # both a_mod and b_mod are 0.:
+        # if both passed values are whole numbers, just get the
+        # corresponding value
+        vf = int(arr[b_index][a_index])  # may store shorts, etc
+
+    return vf

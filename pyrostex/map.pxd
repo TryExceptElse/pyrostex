@@ -111,3 +111,4 @@ cdef class CubeSide(TileMap):
 cpdef vector_from_lat_lon(pos)
 cpdef lat_lon_from_vector(vector)
 cdef lat_lon_from_vector_(double[2] lat_lon, double[3] vector)
+cdef int sample(np.ndarray arr, double[2] pos) except? -1
