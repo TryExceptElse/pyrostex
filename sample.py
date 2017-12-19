@@ -1,3 +1,10 @@
+"""
+Sample script for manually testing functionality of pyrostex
+
+Creates a sample Spheroid and writes all debug information to
+test/resources/out/test_spheroid
+"""
+
 from time import time
 
 from pyrostex.procede import Spheroid

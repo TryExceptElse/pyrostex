@@ -82,15 +82,35 @@ cdef class TextureMap:
         assert self.height, self.height
 
     cpdef np.ndarray load_arr(self, unicode path):
+        """
+        Loads and returns texture data from passed path.
+        :param str path
+        :return np.ndarray
+        """
         return np.load(path, allow_pickle=False)
 
     cpdef void save(self, unicode path):
+        """
+        Saves TextureMap data to passed path.
+        :param str path
+        """
         np.save(path, self._arr, allow_pickle=False)
 
     cpdef np.ndarray make_arr(self, width, height, data_type=np.uint8):
+        """
+        Creates and returns a new array to store TextureMap data in
+        :param width int
+        :param height int
+        :data_type np data type (ex: np.uint8, np.uint16, etc)
+        :return np.ndarray
+        """
         return np.ndarray((height, width), data_type or np.uint8)
 
     cpdef void set_arr(self, arr):
+        """
+        Sets TextureMap data array and updates properties appropriately
+        :param arr np.ndarray
+        """
         self._arr = arr
         self.height, self.width = arr.shape
         if arr.dtype == np.uint8:
@@ -107,6 +127,9 @@ cdef class TextureMap:
         Clones array information from passed prototype, converting
         information to a new format (Cube from LatLon for example)
         if needed.
+        :param p TextureMap to clone data from
+        :param width int width of new data array
+        :param height int height of new data array
         """
         self.set_arr(self.make_arr(width, height, p.data_type))
         assert self.height == height, (self.height, height)
@@ -139,6 +162,11 @@ cdef class TextureMap:
         )
 
     cdef int v_from_lat_lon_(self, double[2] pos) except? -1:
+        """
+        Gets value stored for passed latitude, longitude
+        :param pos lat, lon
+        :return int
+        """
         raise NotImplementedError(
             '{} does not have method \'v_from_lat_lon_\''
             .format(self.__class__.__name__)
@@ -148,7 +176,7 @@ cdef class TextureMap:
         """
         Gets pixel value at passed position on this map.
         :param pos: pos
-        :return:
+        :return int
         """
         cdef double[2] pos_
         cp2a_2d(pos, pos_)
@@ -163,6 +191,8 @@ cdef class TextureMap:
     cdef int v_from_xy_(self, double[2] pos) except? -1:
         """
         Gets pixel value at passed position on this map.
+        Given a position between indices, will return a weighted
+        average of the pixels stored around the passed position.
         :param pos: pos
         :return: int
         """
@@ -238,6 +268,11 @@ cdef class TextureMap:
         return vf
 
     cpdef int v_from_rel_xy(self, tuple pos) except? -1:
+        """
+        Returns value stored for passed x, y position in TextureMap data.
+        :param pos x, y int or float
+        :return int
+        """
         IF ASSERTS:
             assert 0 <= pos[0] < 1, pos[0]
             assert 0 <= pos[1] < 1, pos[1]
@@ -246,6 +281,11 @@ cdef class TextureMap:
         return self.v_from_rel_xy_(pos_)
 
     cdef int v_from_rel_xy_(self, double[2] pos) except? -1:
+        """
+        Gets value stored for passed x, y position in TextureMap data.
+        :param pos x, y floats in range (0-1) inclusive
+        :return int
+        """
         IF ASSERTS:
             assert 0 <= pos[0] <= 1, pos[0]
             assert 0 <= pos[1] <= 1, pos[1]
@@ -258,6 +298,10 @@ cdef class TextureMap:
         return self.v_from_xy_(abs_pos)
 
     cdef int v_from_xy_indices_(self, int[2] pos) except? -1:
+        """
+        Gets value stored in data array at passed x, y indices.
+        :param pos int x, int y
+        """
         a = pos[0]
         b = pos[1]
         if not 0 <= a <= self.width - 1:
@@ -272,8 +316,8 @@ cdef class TextureMap:
     cpdef int v_from_vector(self, vector) except? -1:
         """
         Gets pixel value identified by vector.
-        :param vector:
-        :return:
+        :param vector: vec3
+        :return int
         """
         raise NotImplementedError(
             '{} does not have method \'v_from_vector\''
@@ -281,12 +325,22 @@ cdef class TextureMap:
             )
 
     cdef int v_from_vector_(self, double[3] vector) except? -1:
+        """
+        Gets pixel value identified by vector.
+        :param vector: vec3
+        :return int
+        """
         raise NotImplementedError(
             '{} does not have method \'v_from_vector_\''
             .format(self.__class__.__name__)
             )
 
     cpdef object gradient_from_xy(self, tuple[double] pos):
+        """
+        Gets gradient of map as a vec2 at passed position.
+        :param pos x, y int or floats
+        :return mathutils.Vector
+        """
         cdef double[2] gr
         cdef double[2] pos_
         cp2a_2d(pos, pos_)
@@ -295,6 +349,11 @@ cdef class TextureMap:
 
     @cython.cdivision(True)
     cdef void gradient_from_xy_(self, double[2] gr, double[2] pos) except *:
+        """
+        Gets gradient of map as a vec2 at passed position.
+        :param pos x, y doubles
+        :return vec2
+        """
         cdef int[2] p0, p1, p2, p3
         cdef int v0, v1, v2, v3
         self._sample_pos(p0, p1, p2, p3, pos)
@@ -335,7 +394,6 @@ cdef class TextureMap:
         self.r_px_(p3, p2)
         self.u_px_(p1, p2)
         self.ur_px_(p0, p2)
-
 
     cdef inline void r_px_(self, int[2] new_pos, int[2] old_pos):
         """
@@ -654,10 +712,10 @@ cdef class CubeMap(TextureMap):
                     assert v >= 0
                 sum += v
         IF ASSERTS:
-            assert sum > 0, sum  # at least one sample is expected to be > 0
+            assert sum >= 0, sum
         sum /= samples * samples
         IF ASSERTS:
-            assert sum > 0, "sum: " + str(sum)
+            assert sum >= 0, "sum: " + str(sum)
         return sum
 
     @cython.wraparound(False)

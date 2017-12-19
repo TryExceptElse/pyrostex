@@ -5,8 +5,6 @@ example use; building extensions:
     python setup.py build_ext --inplace --asserts
 """
 import os
-import platform
-import time
 
 from distutils.core import setup, Extension
 from Cython.Build import cythonize
