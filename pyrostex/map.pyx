@@ -1,4 +1,4 @@
-# cython: infer_types=True, boundscheck=False, nonecheck=False, language_level=3,
+# cython: infer_types=True, boundscheck=False, nonecheck=False, language_level=3, initializedcheck=False
 
 """
 Maps for storing data about a map for a sphere.
@@ -12,7 +12,8 @@ Maps for storing data about a map for a sphere.
 # todo:
 #   successfully generate pressure map
 #   refactor to use memory view of floats instead of np array
-#   generate wind vector map from pressure map
+#   generate wind point_vector map from pressure map
+#   remove redundant FastNoise wrapper class
 
 # includes
 include "flags.pxi"
@@ -29,7 +30,7 @@ cimport cython
 from mathutils import Vector
 
 from math import radians
-from libc.math cimport cos, sin, atan2, sqrt, pow, fabs, ceil, log2
+from libc.math cimport cos, sin, atan2, sqrt, pow, fabs, ceil, log2, isnan
 
 # project imports
 from .includes cimport cmathutils as mu
@@ -499,9 +500,12 @@ cdef class CubeMap(TextureMap):
         :param vector: Vector (x, y, z)
         :return:
         """
-        lat_lon = lat_lon_from_vector(vector)
-        tile = self.tile_from_lat_lon(lat_lon)
-        return tile.v_from_vector(vector)
+        return self.v_from_vector_(cp2v_3d(vector))
+
+    cdef int v_from_vector_(self, vec3 vector) except? -1:
+        cdef latlon lat_lon = lat_lon_from_vector_(vector)
+        cdef TileMap tile = self.tile_from_lat_lon_(lat_lon)
+        return tile.v_from_vector_(vector)
 
     cpdef int v_from_xy(self, pos, tile=None) except? -1:
         """
@@ -578,6 +582,9 @@ cdef class CubeMap(TextureMap):
         return self.tile_from_lat_lon_(lat_lon_)
 
     cdef CubeSide tile_from_lat_lon_(self, latlon lat_lon):
+        IF ASSERTS:
+            assert MIN_LAT <= lat_lon.lat <= MAX_LAT, lat_lon
+            assert MIN_LON <= lat_lon.lon <= MAX_LON, lat_lon
         cdef vec3 vector = vector_from_lat_lon_(lat_lon)
         return self.tile_from_vector_(vector)
 
@@ -593,7 +600,7 @@ cdef class CubeMap(TextureMap):
     @cython.cdivision(True)
     cdef short tile_index_from_xy_(self, vec2 pos):
         """
-        Private method for finding the index corresponding to 
+        Private method for finding the index corresponding to
         a passed position.
         """
         if not 0 <= pos.x < self.width:
@@ -612,6 +619,7 @@ cdef class CubeMap(TextureMap):
             i += 3
         return i
 
+    @cython.cdivision(True)
     cdef double gauss_smooth_xy_(
             self, vec2 pos, double radius, int samples) except -1.:
         # Should never return a negative normally.
@@ -620,28 +628,34 @@ cdef class CubeMap(TextureMap):
         using the passed radius and number of sample positions
         Passed radius is in pixels
         """
-        cdef vec3 c_pos_vector
-        polar_vector = Vector((0, 0, 1))
+        cdef vec3 pos_vector  # vector identifying passed position
+        cdef vec3 point_vector  # vector identifying sampled point
+        cdef vec3 polar_vector = mu.vec3New(0, 0, 1)
+        cdef mat3x3 rotation  # rotation matrix
         if samples < 1:
             raise ValueError('Samples must be >= 1. Got: {}'.format(samples))
-        # todo: don't use python vector objects. This is slow
-        c_pos_vector = self.vector_from_xy_(pos)
-        pos_vector = Vector((c_pos_vector.x, c_pos_vector.y, c_pos_vector.z))
-        rotation = polar_vector.rotation_difference(pos_vector)  # todo: check
+        pos_vector = self.vector_from_xy_(pos)
+        mu.rotation_difference(rotation, polar_vector, pos_vector)
         cdef double sum = 0.
         cdef double v
-        cdef double lat, lon
+        cdef latlon ll
         for i in range(samples):
-            lon = i / samples * TAU - PI
+            ll.lon = i / samples * TAU - PI
             IF ASSERTS:
-                assert MIN_LON <= lon <= MAX_LON, lon
+                assert MIN_LON <= ll.lon <= MAX_LON, ll.lon
             for j in range(samples):
-                lat = MAX_LAT - MAX_LAT / self.height / samples * radius * j
+                ll.lat = MAX_LAT - MAX_LAT / self.height / samples * radius * j
                 IF ASSERTS:
-                    assert MIN_LAT <= lat <= MAX_LAT, lat
-                point_vector = vector_from_lat_lon((lat, lon))
-                point_vector.rotate(rotation)
-                v = self.v_from_vector(point_vector)
+                    assert MIN_LAT <= ll.lat <= MAX_LAT, ll.lat
+                point_vector = vector_from_lat_lon_(ll)
+                point_vector = mu.mat3x3MultiplyVector(rotation, point_vector)
+                IF ASSERTS:
+                     # check that values have been set
+                    assert point_vector.x != 0 or \
+                        point_vector.y != 0 or \
+                        point_vector.z != 0, \
+                        'v: {}, ll: {}'.format(point_vector, ll)
+                v = self.v_from_vector_(point_vector)
                 IF ASSERTS:
                     assert v >= 0
                 sum += v
@@ -903,6 +917,23 @@ cdef class TileMap(TextureMap):
             b = y / -z
         else:
             raise IndexError(self.cube_face)
+        # correct minor floating point errors (~1e-12 or smaller)
+        if a < -1:
+            IF ASSERTS:
+                assert a + 1 > -1e-12, a
+            a = -1
+        if a > 1:
+            IF ASSERTS:
+                assert a - 1 < 1e-12, a
+            a = 1
+        if b < -1:
+            IF ASSERTS:
+                assert b + 1 > -1e-12, b
+            b = -1
+        if b > 1:
+            IF ASSERTS:
+                assert b - 1 < 1e-12, b
+            b = 1
         IF ASSERTS:
             assert -1 <= a <= 1 and -1 <= b <= 1, \
                 'position outside expected range: ({},{}), tile: {}' \
@@ -988,7 +1019,7 @@ cdef class TileMap(TextureMap):
 
 
 cdef class CubeSide(TileMap):
-    
+
     def __init__(self, cube_face, cube_arr):
         self.cube_face = cube_face
         self._arr = cube_arr
@@ -1024,8 +1055,18 @@ cdef class CubeSide(TileMap):
         :return: PixelValue
         """
         if not 0 <= pos.x <= self.width - 1:
+            # correct minor floating point error
+            if -1e-12 < pos.x < 0:
+                pos.x = 0
+            elif 1 < pos.x < self.width - 1 + 1e-12:
+                pos.x = self.width - 1
             raise ValueError('x ({}) outside valid range'.format(pos.x))
         if not 0 <= pos.y <= self.height - 1:
+            # correct minor floating point error
+            if -1e-12 < pos.y < 0:
+                pos.y = 0
+            elif 1 < pos.y < self.height - 1 + 1e-12:
+                pos.x = self.height - 1
             raise ValueError('y ({}) outside valid range'.format(pos.y))
         cdef vec2 viewed_map_xy
         x = pos.x
@@ -1056,19 +1097,27 @@ cpdef vector_from_lat_lon(pos):
     cdef vec3 vector_ = vector_from_lat_lon_(cp2ll(pos))
     return Vector((vector_.x, vector_.y, vector_.z))
 
+IF ASSERTS:
+    cdef vec3 vector_from_lat_lon_(latlon lat_lon) except *:
+        cdef vec3 vector
+        cdef double lat = lat_lon.lat, lon = lat_lon.lon
 
-cdef vec3 vector_from_lat_lon_(latlon lat_lon):
-    cdef vec3 vector
-    cdef double lat = lat_lon.lat, lon = lat_lon.lon
+        assert MIN_LAT <= lat <= MAX_LAT + 1e-6, 'bad lat: {}'.format(lat_lon)
+        assert MIN_LON <= lon <= MAX_LON + 1e-6, 'bad lon: {}'.format(lat_lon)
 
-    IF ASSERTS:
-        assert MIN_LAT <= lat <= MAX_LAT + 1e-6, 'bad lat: {}'.format(lat)
-        assert MIN_LON <= lon <= MAX_LON + 1e-6, 'bad lon: {}'.format(lon)
+        vector.x = cos(lat) * cos(lon)
+        vector.y = cos(lat) * sin(lon)
+        vector.z = sin(lat)
+        return vector
+ELSE:
+    cdef vec3 vector_from_lat_lon_(latlon lat_lon):
+        cdef vec3 vector
+        cdef double lat = lat_lon.lat, lon = lat_lon.lon
 
-    vector.x = cos(lat) * cos(lon)
-    vector.y = cos(lat) * sin(lon)
-    vector.z = sin(lat)
-    return vector
+        vector.x = cos(lat) * cos(lon)
+        vector.y = cos(lat) * sin(lon)
+        vector.z = sin(lat)
+        return vector
 
 cpdef lat_lon_from_vector(vector):
     vector = Vector(vector)
@@ -1077,15 +1126,34 @@ cpdef lat_lon_from_vector(vector):
     return lat, lon
 
 
-@cython.wraparound(False)
-cdef latlon lat_lon_from_vector_(vec3 vector):
-    cdef latlon lat_lon
-    x = vector.x
-    y = vector.y
-    z = vector.z
-    lat_lon.lat = atan2(z, sqrt(pow(x, 2) + pow(y, 2)))
-    lat_lon.lon = atan2(y, x)
-    return lat_lon
+IF ASSERTS:
+    @cython.wraparound(False)
+    cdef latlon lat_lon_from_vector_(vec3 vector) except *:
+        assert not isnan(vector.x), vector
+        assert not isnan(vector.y), vector
+        assert not isnan(vector.z), vector
+        assert vector.x != 0 or vector.y != 0 or vector.z != 0, vector
+
+        cdef latlon lat_lon
+        x = vector.x
+        y = vector.y
+        z = vector.z
+        lat_lon.lat = atan2(z, sqrt(pow(x, 2) + pow(y, 2)))
+        lat_lon.lon = atan2(y, x)
+
+        assert MIN_LAT <= lat_lon.lat <= MAX_LAT, lat_lon
+        assert MIN_LON <= lat_lon.lon <= MAX_LON, lat_lon
+        return lat_lon
+ELSE:
+    @cython.wraparound(False)
+    cdef latlon lat_lon_from_vector_(vec3 vector):
+        cdef latlon lat_lon
+        x = vector.x
+        y = vector.y
+        z = vector.z
+        lat_lon.lat = atan2(z, sqrt(pow(x, 2) + pow(y, 2)))
+        lat_lon.lon = atan2(y, x)
+        return lat_lon
 
 
 cdef int sample(np.ndarray arr, vec2 pos) except? -1:

@@ -18,7 +18,8 @@ from settings import FLAGS_PXI_PATH, PLANET_GEN_DIR, PLANET_ZIP, \
 # parse custom arguments
 flags = {  # names flags that will be looked for
     'debug',  # indicates whether maps, debug messages should be printed
-    'asserts'  # indicates whether asserts are included in generated C(++)
+    'asserts',  # indicates whether asserts are included in generated C(++)
+    'test'
 }
 
 # read flags from argv
@@ -73,6 +74,14 @@ if not eq:
     with open(FLAGS_PXI_PATH, 'w+') as flags_pxi:
         flags_pxi.write(flags_content)
 
+# get test extensions
+test_extensions = [
+    Extension(
+        name='test.cy_mathutils_test',
+        sources=['test/cy_mathutils_test.pyx'],
+    ),
+]
+
 # run setup
 setup(
     name='pyrostex',
@@ -81,13 +90,11 @@ setup(
             Extension(
                 name='pyrostex.map',
                 sources=['pyrostex/map.pyx'],
-                include_dirs=['pyrostex/cmathutils'],
                 extra_compile_args=["-ffast-math", "-Ofast"]
             ),
             Extension(
                 name='pyrostex.height',
                 sources=['pyrostex/height.pyx'],
-                include_dirs=['pyrostex/cmathutils'],
                 extra_compile_args=["-ffast-math", "-Ofast"]
             ),
             Extension(
@@ -112,9 +119,9 @@ setup(
                     'pyrostex/noise/noise.pyx',
                     'pyrostex/noise/FastNoise.cpp'
                 ],
-                language="c++",
+                language="c++",  # use of FastNoise class requires c++
                 extra_compile_args=["-ffast-math", "-Ofast"],
             ),
-        ],
+        ] + test_extensions if 'test' in flags else [],
     ),
 )

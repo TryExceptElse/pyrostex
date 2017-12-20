@@ -44,7 +44,7 @@ extern "C"
 
 // Number type
 
-typedef float ccvType;
+typedef double ccvType;
 
 // Used math functions
 

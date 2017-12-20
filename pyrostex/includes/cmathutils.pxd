@@ -1,4 +1,4 @@
-# cython: infer_types=True, nonecheck=False, language_level=3,
+# cython: infer_types=True, nonecheck=False, boundscheck=False, language_level=3,
 
 """
 Cython header declaring functions from ccVector and other vector and
@@ -15,7 +15,11 @@ methods, they are not all re-declared here, instead, they should be
 added to this file as they are needed.
 """
 
-ctypedef float mu_type
+cimport cython
+
+from libc.math cimport sin, cos, sqrt, pow
+
+ctypedef double mu_type
 
 cdef extern from "ccVector.h":
 
@@ -46,6 +50,7 @@ cdef extern from "ccVector.h":
     ###################################################################
 
     vec2    vec2Zero        ()
+    vec2    vec2New         (const mu_type x, const mu_type y)
     vec2    vec2Negate      (const vec2 v)
     int     vec2IsZero      (const vec2 v)
     vec2    vec2Add         (const vec2 a, const vec2 b)
@@ -63,12 +68,14 @@ cdef extern from "ccVector.h":
     ###################################################################
 
     vec3    vec3Zero        ()
+    vec3    vec3New         (const mu_type x, const mu_type y, const mu_type z)
     vec3    vec3Negate      (const vec3 v)
     int     vec3IsZero      (const vec3 v)
     vec3    vec3Add         (const vec3 a, const vec3 b)
     vec3    vec3Subtract    (const vec3 a, const vec3 b)
     vec3    vec3Multiply    (vec3 v, const mu_type n)
     mu_type vec3DotProduct  (const vec3 a, const vec3 b)
+    vec3    vec3CrossProduct(const vec3 a, const vec3 b)
     mu_type vec3Length      (const vec3 v)
     vec3    vec3Normalize   (vec3 v)
     vec3    vec3Reflect     (const vec3 n, const vec3 r)
@@ -127,3 +134,93 @@ cdef extern from "ccVector.h":
     vec4    mat4x4GetCol            (mat4x4 m, const unsigned int n)
     void    mat4x4Transpose         (mat4x4 m, mat4x4 n)
     int     mat4x4Equal             (mat4x4 a, mat4x4 b)
+
+
+#######################################################################
+# UTILITY FUNCTIONS
+#######################################################################
+
+
+cdef inline mu_type vec2Magnitude(vec2 v):
+    return sqrt(pow(v.x, 2) + pow(v.y, 2))
+
+cdef inline mu_type vec3Magnitude(vec3 v):
+    return sqrt(pow(v.x, 2) + pow(v.y, 2) + pow(v.z, 2))
+
+cdef inline mu_type vec4Magnitude(vec4 v):
+    return sqrt(pow(v.x, 2) + pow(v.y, 2) + pow(v.z, 2) + pow(v.w, 2))
+
+@cython.wraparound(False)
+@cython.initializedcheck(False)
+cdef inline void negation_matrix(mat3x3 m):
+    """
+    Returns a matrix that inverts a vec3
+    :param m mat3x3 matrix to store values in.
+    """
+    m[0][0] = -1
+    m[0][1] = 0
+    m[0][2] = 0
+    m[1][0] = 0
+    m[1][1] = -1
+    m[1][2] = 0
+    m[2][0] = 0
+    m[2][1] = 0
+    m[2][2] = -1
+    # no return value.
+
+cdef inline int vec3IsNegate(vec3 a, vec3 b):
+    """
+    Tests whether passed vectors are negated versions of each other
+    :return bint
+    """
+    return a.x + b.x == 0 and a.y + b.y == 0 and a.z + b.z == 0
+
+@cython.cdivision(True)
+@cython.initializedcheck(False)
+cdef inline void rotation_difference(mat3x3 r, vec3 a, vec3 b):
+    """
+    Finds the rotation matrix required to rotate vector a to align
+    with vector b
+    :param a vec3
+    :param b vec3
+    :return mat3x3
+    """
+    cdef vec3 v
+    cdef mu_type s, c
+    cdef mat3x3 vx, m
+
+    # if a == b, no transform is needed
+    if vec3Equal(a, b):
+        mat3x3Identity(r)
+        return
+    # if a and b are directly opposed, return negation matrix
+    if vec3IsNegate(a, b):
+        negation_matrix(r)
+        return
+
+    v = vec3CrossProduct(b, a)
+    # s = vec3Magnitude(v)
+    c = vec3DotProduct(b, a)
+
+    vx[0][0] = 0.
+    vx[0][1] = -v.z
+    vx[0][2] = v.y
+    vx[1][0] = v.z
+    vx[1][1] = 0.
+    vx[1][2] = -v.x
+    vx[2][0] = -v.y
+    vx[2][1] = v.x
+    vx[2][2] = 0.
+
+    # R = I + [v]x + ([v]x)^2 * (1 / 1 + c)
+
+    mat3x3Identity(r)  # set r to identity array
+    mat3x3Add(r, r, vx)
+    mat3x3MultiplyMatrix(m, vx, vx)
+    mat3x3MultiplyScalar(
+        m,
+        (1. - c) / (pow(v.x, 2) + pow(v.y, 2) + pow(v.z, 2))  # s^2
+    )
+    mat3x3Add(r, r, m)
+
+    # result stored in passed mat3x3 mat. No return value

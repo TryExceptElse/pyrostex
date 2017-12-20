@@ -1,3 +1,5 @@
+include "flags.pxi"
+
 import numpy as np
 
 cimport numpy as np
@@ -104,10 +106,16 @@ cdef class TileMap(TextureMap):
 
 
 cdef class CubeSide(TileMap):
-    pass
+    pass  # no new methods defined, only old ones overwritten
 
 
 cpdef vector_from_lat_lon(pos)
 cpdef lat_lon_from_vector(vector)
-cdef latlon lat_lon_from_vector_(vec3 vector)
+IF ASSERTS:
+    cdef latlon lat_lon_from_vector_(vec3 vector) except *
+    cdef vec3 vector_from_lat_lon_(latlon lat_lon) except *
+ELSE:
+    cdef latlon lat_lon_from_vector_(vec3 vector)
+    cdef vec3 vector_from_lat_lon_(latlon lat_lon)
+
 cdef int sample(np.ndarray arr, vec2 pos) except? -1

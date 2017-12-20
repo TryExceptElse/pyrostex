@@ -5,6 +5,8 @@
 pyrostex/*.c  # cython c files
 pyrostex/*.so  # compiled c
 pytostex/*.html  # cython performance readouts
+test/*.c
+test/*.so
 
 # ignore build stuff
 build/*
