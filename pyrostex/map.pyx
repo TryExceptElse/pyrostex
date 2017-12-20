@@ -10,7 +10,6 @@ Maps for storing data about a map for a sphere.
 #   c - specific arguments, such as memory views.
 
 # todo:
-#   successfully generate pressure map
 #   refactor to use memory view of floats instead of np array
 #   generate wind point_vector map from pressure map
 #   remove redundant FastNoise wrapper class
@@ -1030,6 +1029,7 @@ cdef class CubeSide(TileMap):
         cube_map_shape = self._arr.shape
         self.height = int(cube_map_shape[0] / 2)
         self.width = int(cube_map_shape[1] / 3)
+        self._ref_pos = self._find_reference_position()
         if not self.height == cube_map_shape[0] / 2:
             raise ValueError("height: {} is not evenly divisible into 2 parts"
                              .format(self.height))
@@ -1073,19 +1073,21 @@ cdef class CubeSide(TileMap):
         y = pos.y
         # modify x and y to be relative to the tile's origin
         # for this cube side
-        x_ref, y_ref = self.reference_position
-        viewed_map_xy.x = x + x_ref
-        viewed_map_xy.y = y + y_ref
+        viewed_map_xy.x = x + self._ref_pos.x
+        viewed_map_xy.y = y + self._ref_pos.y
         return sample(self._arr, viewed_map_xy)
 
-    @property
-    def reference_position(self):  # todo: calculate only once
-        if not 0 <= self.cube_face < 6:  # if outside valid range
-            raise IndexError(self.cube_face)
-        elif self.cube_face < 3:
-            return self.cube_face * self.width, 0
+    cdef vec2 _find_reference_position(self):
+        IF ASSERTS:
+            assert 0 <= self.cube_face < 6, self.cube_face
+        if self.cube_face < 3:
+            return mu.vec2New(self.cube_face * self.width, 0.)
         elif self.cube_face < 6:
-            return (self.cube_face - 3) * self.width, self.height
+            return mu.vec2New((self.cube_face - 3) * self.width, self.height)
+
+    @property
+    def reference_position(self):
+        return self._ref_pos.x, self._ref_pos.y
 
 
 cpdef vector_from_lat_lon(pos):

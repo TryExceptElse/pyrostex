@@ -106,7 +106,9 @@ cdef class TileMap(TextureMap):
 
 
 cdef class CubeSide(TileMap):
-    pass  # no new methods defined, only old ones overwritten
+    cdef vec2 _ref_pos
+
+    cdef vec2 _find_reference_position(self)
 
 
 cpdef vector_from_lat_lon(pos)

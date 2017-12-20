@@ -4,6 +4,8 @@ Sample script for manually testing functionality of pyrostex
 Creates a sample Spheroid and writes all debug information to
 test/resources/out/test_spheroid
 """
+import os
+import shutil
 
 from time import time
 
@@ -13,6 +15,9 @@ from settings import ROOT_PATH
 
 def make_sample_spheroid():
     spheroid_dir = ROOT_PATH + '/test/resources/out/test_spheroid'
+    if os.path.exists(spheroid_dir):
+        print('clearing spheroid dir')
+        shutil.rmtree(spheroid_dir)
     print('creating spheroid')
     start_t = time()
     spheroid = Spheroid(
