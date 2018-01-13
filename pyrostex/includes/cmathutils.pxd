@@ -199,7 +199,6 @@ cdef inline void rotation_difference(mat3x3 r, vec3 a, vec3 b):
         return
 
     v = vec3CrossProduct(b, a)
-    # s = vec3Magnitude(v)
     c = vec3DotProduct(b, a)
 
     vx[0][0] = 0.

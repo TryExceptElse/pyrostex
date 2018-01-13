@@ -4,72 +4,30 @@
 Handles generation of temperature map from height map
 """
 
-include "macro.pxi"  # include convenience inline functions
-
 # imports from packages
 from libc.math cimport exp, cos, log2, ceil
 
 import png
-import numpy as np
 
-cimport numpy as np
 cimport cython
 
 # imports from within project
-from .map cimport CubeMap, lat_lon_from_vector_
+from .map cimport GreyCubeMap, lat_lon_from_vector_
+
+include "flags.pxi"
 
 
 DEF ATM_M = 0.029  # molar mass of atmosphere
 DEF R = 8.3144598  # gas constant
 
-DEF MAX_T = 8192  # allows 1/8 Kelvin accuracy up to 8,192 K
-DEF MAX_MAP_V = 65535
-DEF CONVERSION_RATIO = 8.
+DEF MAX_T = 8192  # for sanity-checking
 
 DEF MEAN_CS = 0.866  # average cross section
 DEF BASE_H_VAL = 32767
 
 
-cdef class TMap(CubeMap):
-
-    cpdef float t_from_lat_lon(self, pos) except? -1:
-        return t_from_stored_v(self.v_from_lat_lon_(cp2ll(pos)))
-
-    cdef float t_from_lat_lon_(self, latlon lat_lon) except? -1:
-        return t_from_stored_v(self.v_from_lat_lon_(lat_lon))
-
-    cpdef float t_from_xy(self, pos) except? -1:
-        # copy python object values to vec2 and call v_from_xy_
-        stored_v = self.v_from_xy_(cp2v_2d(pos))
-        return t_from_stored_v(stored_v)
-
-    cdef float t_from_xy_(self, vec2 pos) except? -1:
-        stored_v = self.v_from_xy_(pos)
-        return t_from_stored_v(stored_v)
-
-    cpdef float t_from_vector(self, vector) except? -1:
-        # convert py object to vec3 and get stored value
-        stored_v = self.v_from_vector_(cp2v_3d(vector))
-        # convert stored value to temperature and return
-        return t_from_stored_v(stored_v)
-
-    cdef float t_from_vector_(self, vec3 vector) except? -1:
-        stored_v = self.v_from_vector_(vector)
-        return t_from_stored_v(stored_v)
-
-    cpdef void set_xy_t(self, pos, float t):
-        cdef int[2] pos_
-        pos_[0] = pos[0]
-        pos_[1] = pos[1]
-        stored_v = stored_v_from_t(t)
-        self.set_xy_(pos_, stored_v)
-
-    cdef void set_xy_t_(self, int[2] pos, float t):
-        stored_v = stored_v_from_t(t)
-        self.set_xy_(pos, stored_v)
-
-cpdef TMap make_warming_map(
-        HeightCubeMap height_map,
+cpdef GreyCubeMap make_warming_map(
+        GreyCubeMap height_map,
         float rel_res,  # relative resolution
         float mean_temp,
         float base_atm,
@@ -90,10 +48,9 @@ cpdef TMap make_warming_map(
 
     cdef int width = int(height_map.width * rel_res)
     cdef int height = int(height_map.height * rel_res)
-    cdef TMap warming_map = TMap(
+    cdef GreyCubeMap warming_map = GreyCubeMap(
         width=width,
-        height=height,
-        data_type=np.uint16)
+        height=height)
 
     no_atm_temp = mean_temp - atm_warming # temp at mean lat in w/o atmosphere
     if not 0 <= no_atm_temp <= MAX_T:
@@ -120,7 +77,7 @@ cpdef TMap make_warming_map(
             #     t += ((p / base_atm) * 2 - 1) * atm_warming
             if not 0 <= t <= MAX_T:
                 assert False, (t, base_atm)  # sanity check
-            warming_map.set_xy_t_(xy_int_pos, int(t))
+            warming_map.set_xy_(xy_int_pos, t)
 
     return warming_map
 
@@ -142,12 +99,3 @@ cdef inline float find_cs_ratio(double lat):
     :param lat: double; latitude in radians
     """
     return cos(lat) / MEAN_CS  # get ratio relative to average cs
-
-
-@cython.cdivision(True)
-cdef inline float t_from_stored_v(int stored_v):
-    return float(stored_v) / CONVERSION_RATIO
-
-
-cdef inline int stored_v_from_t(float t):
-    return int(t * CONVERSION_RATIO)

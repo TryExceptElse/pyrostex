@@ -4,8 +4,7 @@ import numpy as np
 
 import settings
 
-from .map import LatLonMap, CubeMap
-from .height import HeightCubeMap as HCubeMap
+from .map import GreyLatLonMap, GreyCubeMap
 from .temp import make_warming_map
 from .wind import make_wind_map
 
@@ -114,15 +113,10 @@ class Spheroid:
         height_field = HeightField(base_map_path)
         width = BASE_MAP_WIDTH
         height = height_field.n_rows
-        arr = np.ndarray((height, width), np.uint16)
-
-        def scale(v):
-            assert v > MIN_HEIGHT_MAP_EL, v
-            assert v < MAX_HEIGHT_MAP_EL, v
-            return int(v / -HEIGHT_MAP_RANGE * 65535) + 32767  # 2^16 & 2^16/2
+        arr = np.ndarray((height, width), np.float32)
 
         for y, row in enumerate(height_field.filled_rows):
-            arr[y] = [scale(v) for v in row]
+            arr[y] = row
         for row in arr:
             assert any(value for value in row), row
 
@@ -165,8 +159,9 @@ class Spheroid:
         self.make_base_height_map()
         self.make_height_arr()
         height_map_path = os.path.join(self.dir_path, HEIGHT_MAP_NAME)
-        lat_lon_map = LatLonMap(path=height_map_path)  # load from file
-        cube_map = HCubeMap(prototype=lat_lon_map, height=1024, width=1536)
+        lat_lon_map = GreyLatLonMap(
+            height=1302, width=2048, path=height_map_path)  # load from file
+        cube_map = GreyCubeMap(prototype=lat_lon_map, height=1024, width=1536)
         return cube_map
 
     def make_warming_map(self):

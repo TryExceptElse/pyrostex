@@ -11,6 +11,7 @@ from Cython.Build import cythonize
 from sys import argv
 from zipfile import ZipFile
 from subprocess import call
+from cymacro import ExtExpCol
 
 from settings import FLAGS_PXI_PATH, PLANET_GEN_DIR, PLANET_ZIP, \
     PLANET_GEN_EXE, PLANET_GEN_PATH
@@ -82,20 +83,18 @@ test_extensions = [
     ),
 ]
 
+macro_expander = ExtExpCol()
+
 # run setup
 setup(
     name='pyrostex',
-    ext_modules=cythonize(
+    ext_modules=cythonize(macro_expander(
         [
             Extension(
                 name='pyrostex.map',
-                sources=['pyrostex/map.pyx'],
-                extra_compile_args=["-ffast-math", "-Ofast"]
-            ),
-            Extension(
-                name='pyrostex.height',
-                sources=['pyrostex/height.pyx'],
-                extra_compile_args=["-ffast-math", "-Ofast"]
+                sources=['pyrostex/map.pyx.cm'],
+                extra_compile_args=["-ffast-math", "-Ofast"],
+                # language='c++',
             ),
             Extension(
                 name='pyrostex.temp',
@@ -109,11 +108,6 @@ setup(
                 extra_compile_args=["-ffast-math", "-Ofast"]
             ),
             Extension(
-                name='pyrostex.v_map',
-                sources=['pyrostex/v_map.pyx'],
-                extra_compile_args=["-ffast-math", "-Ofast"],
-            ),
-            Extension(
                 name='pyrostex.noise.noise',
                 sources=[
                     'pyrostex/noise/noise.pyx',
@@ -122,6 +116,7 @@ setup(
                 language="c++",  # use of FastNoise class requires c++
                 extra_compile_args=["-ffast-math", "-Ofast"],
             ),
-        ] + test_extensions if 'test' in flags else [],
+        ] + test_extensions if 'test' in flags else []
+        ),
     ),
 )
