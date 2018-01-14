@@ -1102,7 +1102,7 @@ cdef class GreyCubeMap(CubeMap):
         :return int
         """
         cdef int p0, p1, p2, p3  # relative array positions
-        cdef a_t left0, left1, right0, right1, left, right, vf
+        cdef a_t left0, left1, right0, right1, vf
         cdef float a_mod, b_mod
         cdef a_t *arr = <a_t *> self._arr
     
@@ -1537,7 +1537,7 @@ cdef class GreyLatLonMap(LatLonMap):
         :return int
         """
         cdef int p0, p1, p2, p3  # relative array positions
-        cdef a_t left0, left1, right0, right1, left, right, vf
+        cdef a_t left0, left1, right0, right1, vf
         cdef float a_mod, b_mod
         cdef a_t *arr = <a_t *> self._arr
     
@@ -1972,7 +1972,7 @@ cdef class GreyTileMap(TileMap):
         :return int
         """
         cdef int p0, p1, p2, p3  # relative array positions
-        cdef a_t left0, left1, right0, right1, left, right, vf
+        cdef a_t left0, left1, right0, right1, vf
         cdef float a_mod, b_mod
         cdef a_t *arr = <a_t *> self._arr
     
@@ -2407,7 +2407,7 @@ cdef class GreyCubeSide(CubeSide):
         :return int
         """
         cdef int p0, p1, p2, p3  # relative array positions
-        cdef a_t left0, left1, right0, right1, left, right, vf
+        cdef a_t left0, left1, right0, right1, vf
         cdef float a_mod, b_mod
         cdef a_t *arr = <a_t *> self._arr
     
@@ -3694,10 +3694,20 @@ ELSE:
 
 
 cpdef rt pure_region(int region_code) except *:
+    """
+    Creates new region struct using a single region code
+    :param region_code: int identifier for region.
+    :return rt
+    """
     return pure_region_(region_code)
 
 
 cdef rt pure_region_(int region_code) except *:
+    """
+    Creates new region struct using a single region code
+    :param region_code: int identifier for region.
+    :return rt
+    """
     cdef rt r
 
     if not 0 <= region_code < 256:
@@ -3713,10 +3723,27 @@ cdef rt pure_region_(int region_code) except *:
 
 
 cpdef rt mix_region(rt r0, float w0, rt r1, float w1) except *:
+    """
+    Combines passed region structs using passed weights
+    :param r0: rt
+    :param w0: float
+    :param r1: rt
+    :param w1: float
+    :return rt
+    """
     return mix_region_(r0, w0, r1, w1)
 
 
+@cython.cdivision(True)
 cdef rt mix_region_(rt r0, float w0, rt r1, float w1) except *:
+    """
+    Combines passed region structs using passed weights
+    :param r0: rt
+    :param w0: float
+    :param r1: rt
+    :param w1: float
+    :return rt
+    """
     # adjust weights if they do not sum to 1.
     if w0 + w1 != 1.:
         sum = w0 + w1
@@ -3760,6 +3787,7 @@ cdef rt mix_region_(rt r0, float w0, rt r1, float w1) except *:
 cdef float _get_region_wt(rt r, int region_code):
     """
     Gets weight of region code in passed region type
+    :return float
     """
     if r.r0 == region_code:
         return r.w0
@@ -3773,7 +3801,19 @@ cdef float _get_region_wt(rt r, int region_code):
         return 0.
 
 
-cdef rt _make_region(r0, w0, r1, w1, r2, w2, r3, w3):
+cdef rt _make_region(
+        int r0,
+        float w0,
+        int r1,
+        float w1,
+        int r2,
+        float w2,
+        int r3,
+        float w3):
+    """
+    Creates a region struct from passed data
+    :return rt
+    """
     cdef rt r
     r.r0 = r0
     r.r1 = r1
@@ -3787,6 +3827,14 @@ cdef rt _make_region(r0, w0, r1, w1, r2, w2, r3, w3):
 
 
 cdef rt _sort_region(rt r):
+    """
+    Given a region struct, returns a region struct created from the
+    passed data, but with region codes and weights sorted into
+    greatest-to-least order, so that r0 is the region code with
+    the greatest weight.
+    :param r: rt
+    :return rt
+    """
     cdef bint sort = True  # whether sorting should continue
 
     while sort:
@@ -3815,6 +3863,7 @@ cpdef mix_av(v0, float w0, v1, float w1):
     cdef av r = mix_av_(v0_, w0, v1_, w1)
     return r.x, r.y
 
+@cython.cdivision(True)
 cdef av mix_av_(av v0, float w0, av v1, float w1) except *:
     cdef av vf
 
