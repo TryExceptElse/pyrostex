@@ -70,6 +70,9 @@ GREY_DATA_DEFINITIONS = ''  # Macro placeholder
 VECTOR_DATA_DEFINITIONS = ''  # Macro placeholder
 
 
+REGION_DATA_DEFINITIONS = ''  # Macro placeholder
+
+
 #######################################################################
 # ABSTRACT MAPS
 #######################################################################
@@ -995,8 +998,8 @@ cdef class GreyCubeMap(CubeMap):
         exist (for example; if passed position is located where
         geometry folds, such as a cube's corner)
         """
-        p2[0] = int(pos.x)
-        p2[1] = int(pos.y)
+        p2[0] = <int>pos.x
+        p2[1] = <int>pos.y
         self.r_px_(p3, p2)
         self.u_px_(p1, p2)
         self.ur_px_(p0, p2)
@@ -1071,8 +1074,8 @@ cdef class GreyCubeMap(CubeMap):
     
     cpdef void set_xy(self, pos, v) except *:
         cdef int[2] pos_
-        pos_[0] = int(pos[0])
-        pos_[1] = int(pos[1])
+        pos_[0] = <int>pos[0]
+        pos_[1] = <int>pos[1]
         if not 0 <= pos_[0] < self.width:
             raise ValueError('Width {} outside range 0 - {}'
                              .format(pos_[0], self.width))
@@ -1430,8 +1433,8 @@ cdef class GreyLatLonMap(LatLonMap):
         exist (for example; if passed position is located where
         geometry folds, such as a cube's corner)
         """
-        p2[0] = int(pos.x)
-        p2[1] = int(pos.y)
+        p2[0] = <int>pos.x
+        p2[1] = <int>pos.y
         self.r_px_(p3, p2)
         self.u_px_(p1, p2)
         self.ur_px_(p0, p2)
@@ -1506,8 +1509,8 @@ cdef class GreyLatLonMap(LatLonMap):
     
     cpdef void set_xy(self, pos, v) except *:
         cdef int[2] pos_
-        pos_[0] = int(pos[0])
-        pos_[1] = int(pos[1])
+        pos_[0] = <int>pos[0]
+        pos_[1] = <int>pos[1]
         if not 0 <= pos_[0] < self.width:
             raise ValueError('Width {} outside range 0 - {}'
                              .format(pos_[0], self.width))
@@ -1865,8 +1868,8 @@ cdef class GreyTileMap(TileMap):
         exist (for example; if passed position is located where
         geometry folds, such as a cube's corner)
         """
-        p2[0] = int(pos.x)
-        p2[1] = int(pos.y)
+        p2[0] = <int>pos.x
+        p2[1] = <int>pos.y
         self.r_px_(p3, p2)
         self.u_px_(p1, p2)
         self.ur_px_(p0, p2)
@@ -1941,8 +1944,8 @@ cdef class GreyTileMap(TileMap):
     
     cpdef void set_xy(self, pos, v) except *:
         cdef int[2] pos_
-        pos_[0] = int(pos[0])
-        pos_[1] = int(pos[1])
+        pos_[0] = <int>pos[0]
+        pos_[1] = <int>pos[1]
         if not 0 <= pos_[0] < self.width:
             raise ValueError('Width {} outside range 0 - {}'
                              .format(pos_[0], self.width))
@@ -2300,8 +2303,8 @@ cdef class GreyCubeSide(CubeSide):
         exist (for example; if passed position is located where
         geometry folds, such as a cube's corner)
         """
-        p2[0] = int(pos.x)
-        p2[1] = int(pos.y)
+        p2[0] = <int>pos.x
+        p2[1] = <int>pos.y
         self.r_px_(p3, p2)
         self.u_px_(p1, p2)
         self.ur_px_(p0, p2)
@@ -2376,8 +2379,8 @@ cdef class GreyCubeSide(CubeSide):
     
     cpdef void set_xy(self, pos, v) except *:
         cdef int[2] pos_
-        pos_[0] = int(pos[0])
-        pos_[1] = int(pos[1])
+        pos_[0] = <int>pos[0]
+        pos_[1] = <int>pos[1]
         if not 0 <= pos_[0] < self.width:
             raise ValueError('Width {} outside range 0 - {}'
                              .format(pos_[0], self.width))
@@ -2587,6 +2590,67 @@ cdef class VecCubeMap(CubeMap):
     cdef void set_xy_(self, int[2] pos, av vec) except *:
         (<av *> self._arr)[pos[1] * self.width + pos[0]] = vec
     
+    @cython.wraparound(False)
+    @cython.initializedcheck(False)
+    cdef av sample(self, vec2 pos) except *:
+        """
+        Samples passed array at passed position.
+    
+        Passed x and y positions may be values other than an integer,
+        in which case the returned value will be a weighted average of
+        the surrounding positions in the array.
+        :param arr
+        :param pos vec2 indicating x, y position at which to sample array.
+        :param w int width of passed array
+        :return int
+        """
+        cdef int p0, p1, p2, p3  # relative array positions
+        cdef av left0, left1, right0, right1, vf
+        cdef float a_mod, b_mod
+        cdef av *arr = <av *> self._arr
+    
+        pos = mu.vec2Add(pos, self._ref_pos)
+    
+        a = pos.x
+        b = pos.y
+        a_mod = a % 1
+        b_mod = b % 1
+    
+        p2 = (<int> pos.y) * self.width + (<int> pos.x)
+    
+        if a_mod and b_mod:
+            # if all 4 pixels are to be used
+            p3 = p2 + 1
+            p1 = p2 + self.width
+            p0 = p1 + 1
+    
+            left0 = arr[p2]
+            left1 = arr[p1]
+            right0 = arr[p3]
+            right1 = arr[p0]
+    
+            left0 = mix_av_(left1, b_mod, left0, (1 - b_mod))
+            right0 = mix_av_(right1, b_mod, right0, (1 - b_mod))
+            vf = mix_av_(right0, a_mod, left0, (1 - a_mod))
+        elif a_mod:  # if a_mod > 0 and b_mod == 0:
+            # if only one row
+            p3 = p2 + 1
+            left0 = arr[p2]
+            right0 = arr[p3]
+            vf = mix_av_(right0, a_mod, left0, (1 - a_mod))
+        elif b_mod:  # if b_mod > 0 and a_mod == 0:
+            # if only one column
+            p1 = p2 + self.width  # get pixel above base (p2) pixel
+            left0 = arr[p2]
+            left1 = arr[p1]
+            vf = mix_av_(left1, b_mod, left0, (1 - b_mod))
+        else:  # both a_mod and b_mod are 0.:
+            # if both passed values are whole numbers, just get the
+            # corresponding value
+            vf = arr[p2]
+    
+        return vf
+    
     
 
 cdef class VecLatLonMap(LatLonMap):
@@ -2663,6 +2727,67 @@ cdef class VecLatLonMap(LatLonMap):
     
     cdef void set_xy_(self, int[2] pos, av vec) except *:
         (<av *> self._arr)[pos[1] * self.width + pos[0]] = vec
+    
+    @cython.wraparound(False)
+    @cython.initializedcheck(False)
+    cdef av sample(self, vec2 pos) except *:
+        """
+        Samples passed array at passed position.
+    
+        Passed x and y positions may be values other than an integer,
+        in which case the returned value will be a weighted average of
+        the surrounding positions in the array.
+        :param arr
+        :param pos vec2 indicating x, y position at which to sample array.
+        :param w int width of passed array
+        :return int
+        """
+        cdef int p0, p1, p2, p3  # relative array positions
+        cdef av left0, left1, right0, right1, vf
+        cdef float a_mod, b_mod
+        cdef av *arr = <av *> self._arr
+    
+        pos = mu.vec2Add(pos, self._ref_pos)
+    
+        a = pos.x
+        b = pos.y
+        a_mod = a % 1
+        b_mod = b % 1
+    
+        p2 = (<int> pos.y) * self.width + (<int> pos.x)
+    
+        if a_mod and b_mod:
+            # if all 4 pixels are to be used
+            p3 = p2 + 1
+            p1 = p2 + self.width
+            p0 = p1 + 1
+    
+            left0 = arr[p2]
+            left1 = arr[p1]
+            right0 = arr[p3]
+            right1 = arr[p0]
+    
+            left0 = mix_av_(left1, b_mod, left0, (1 - b_mod))
+            right0 = mix_av_(right1, b_mod, right0, (1 - b_mod))
+            vf = mix_av_(right0, a_mod, left0, (1 - a_mod))
+        elif a_mod:  # if a_mod > 0 and b_mod == 0:
+            # if only one row
+            p3 = p2 + 1
+            left0 = arr[p2]
+            right0 = arr[p3]
+            vf = mix_av_(right0, a_mod, left0, (1 - a_mod))
+        elif b_mod:  # if b_mod > 0 and a_mod == 0:
+            # if only one column
+            p1 = p2 + self.width  # get pixel above base (p2) pixel
+            left0 = arr[p2]
+            left1 = arr[p1]
+            vf = mix_av_(left1, b_mod, left0, (1 - b_mod))
+        else:  # both a_mod and b_mod are 0.:
+            # if both passed values are whole numbers, just get the
+            # corresponding value
+            vf = arr[p2]
+    
+        return vf
     
     
 
@@ -2741,6 +2866,67 @@ cdef class VecTileMap(TileMap):
     cdef void set_xy_(self, int[2] pos, av vec) except *:
         (<av *> self._arr)[pos[1] * self.width + pos[0]] = vec
     
+    @cython.wraparound(False)
+    @cython.initializedcheck(False)
+    cdef av sample(self, vec2 pos) except *:
+        """
+        Samples passed array at passed position.
+    
+        Passed x and y positions may be values other than an integer,
+        in which case the returned value will be a weighted average of
+        the surrounding positions in the array.
+        :param arr
+        :param pos vec2 indicating x, y position at which to sample array.
+        :param w int width of passed array
+        :return int
+        """
+        cdef int p0, p1, p2, p3  # relative array positions
+        cdef av left0, left1, right0, right1, vf
+        cdef float a_mod, b_mod
+        cdef av *arr = <av *> self._arr
+    
+        pos = mu.vec2Add(pos, self._ref_pos)
+    
+        a = pos.x
+        b = pos.y
+        a_mod = a % 1
+        b_mod = b % 1
+    
+        p2 = (<int> pos.y) * self.width + (<int> pos.x)
+    
+        if a_mod and b_mod:
+            # if all 4 pixels are to be used
+            p3 = p2 + 1
+            p1 = p2 + self.width
+            p0 = p1 + 1
+    
+            left0 = arr[p2]
+            left1 = arr[p1]
+            right0 = arr[p3]
+            right1 = arr[p0]
+    
+            left0 = mix_av_(left1, b_mod, left0, (1 - b_mod))
+            right0 = mix_av_(right1, b_mod, right0, (1 - b_mod))
+            vf = mix_av_(right0, a_mod, left0, (1 - a_mod))
+        elif a_mod:  # if a_mod > 0 and b_mod == 0:
+            # if only one row
+            p3 = p2 + 1
+            left0 = arr[p2]
+            right0 = arr[p3]
+            vf = mix_av_(right0, a_mod, left0, (1 - a_mod))
+        elif b_mod:  # if b_mod > 0 and a_mod == 0:
+            # if only one column
+            p1 = p2 + self.width  # get pixel above base (p2) pixel
+            left0 = arr[p2]
+            left1 = arr[p1]
+            vf = mix_av_(left1, b_mod, left0, (1 - b_mod))
+        else:  # both a_mod and b_mod are 0.:
+            # if both passed values are whole numbers, just get the
+            # corresponding value
+            vf = arr[p2]
+    
+        return vf
+    
     
 
 cdef class VecCubeSide(CubeSide):
@@ -2818,7 +3004,615 @@ cdef class VecCubeSide(CubeSide):
     cdef void set_xy_(self, int[2] pos, av vec) except *:
         (<av *> self._arr)[pos[1] * self.width + pos[0]] = vec
     
+    @cython.wraparound(False)
+    @cython.initializedcheck(False)
+    cdef av sample(self, vec2 pos) except *:
+        """
+        Samples passed array at passed position.
     
+        Passed x and y positions may be values other than an integer,
+        in which case the returned value will be a weighted average of
+        the surrounding positions in the array.
+        :param arr
+        :param pos vec2 indicating x, y position at which to sample array.
+        :param w int width of passed array
+        :return int
+        """
+        cdef int p0, p1, p2, p3  # relative array positions
+        cdef av left0, left1, right0, right1, vf
+        cdef float a_mod, b_mod
+        cdef av *arr = <av *> self._arr
+    
+        pos = mu.vec2Add(pos, self._ref_pos)
+    
+        a = pos.x
+        b = pos.y
+        a_mod = a % 1
+        b_mod = b % 1
+    
+        p2 = (<int> pos.y) * self.width + (<int> pos.x)
+    
+        if a_mod and b_mod:
+            # if all 4 pixels are to be used
+            p3 = p2 + 1
+            p1 = p2 + self.width
+            p0 = p1 + 1
+    
+            left0 = arr[p2]
+            left1 = arr[p1]
+            right0 = arr[p3]
+            right1 = arr[p0]
+    
+            left0 = mix_av_(left1, b_mod, left0, (1 - b_mod))
+            right0 = mix_av_(right1, b_mod, right0, (1 - b_mod))
+            vf = mix_av_(right0, a_mod, left0, (1 - a_mod))
+        elif a_mod:  # if a_mod > 0 and b_mod == 0:
+            # if only one row
+            p3 = p2 + 1
+            left0 = arr[p2]
+            right0 = arr[p3]
+            vf = mix_av_(right0, a_mod, left0, (1 - a_mod))
+        elif b_mod:  # if b_mod > 0 and a_mod == 0:
+            # if only one column
+            p1 = p2 + self.width  # get pixel above base (p2) pixel
+            left0 = arr[p2]
+            left1 = arr[p1]
+            vf = mix_av_(left1, b_mod, left0, (1 - b_mod))
+        else:  # both a_mod and b_mod are 0.:
+            # if both passed values are whole numbers, just get the
+            # corresponding value
+            vf = arr[p2]
+    
+        return vf
+    
+    
+
+
+#######################################################################
+# REGION MAPS
+#######################################################################
+
+
+cdef class RegCubeMap(CubeMap):
+    
+    
+    cdef void _allocate_arr(self) except *:
+        self._arr = malloc(self.width * self.height * sizeof(rt))
+    
+    cdef void clone(self, AbstractMap p) except *:
+        if isinstance(p, RegCubeMap):
+            self.clone_(<RegCubeMap> p)
+        elif isinstance(p, RegLatLonMap):
+            self.clone_(<RegLatLonMap> p)
+        elif isinstance(p, RegTileMap):
+            self.clone_(<RegTileMap> p)
+        elif isinstance(p, RegCubeSide):
+            self.clone_(<RegCubeSide> p)
+        else:
+            raise TypeError(f'Unexpected prototype map type: {p}')
+    
+    cdef void clone_(self, reg_map_t p) except *:
+        cdef vec2 pos
+        cdef vec3 vector
+        cdef int[2] map_pos
+        cdef rt v
+        for x in range(self.width):
+            for y in range(self.height):
+                # get vector corresponding to position
+                pos.x = x
+                pos.y = y
+                vector = self.vector_from_xy_(pos)
+                v = p.v_from_vector_(vector)
+                map_pos[0] = x
+                map_pos[1] = y
+                self.set_xy_(map_pos, v)
+    
+    # value retrieval methods
+    cpdef rt v_from_lat_lon(self, pos) except *:
+        return self.v_from_lat_lon_(cp2ll(pos))
+    
+    cdef rt v_from_lat_lon_(self, latlon pos) except *:
+        return self.v_from_xy_(self.xy_from_lat_lon_(pos))
+    
+    cpdef rt v_from_xy(self, pos) except *:
+        return self.v_from_xy_(cp2v_2d(pos))
+    
+    cdef rt v_from_xy_(self, vec2 pos) except *:
+        return self.sample(pos)
+    
+    cpdef rt v_from_rel_xy(self, tuple pos) except *:
+        return self.v_from_rel_xy_(cp2v_2d(pos))
+    
+    cdef rt v_from_rel_xy_(self, vec2 pos) except *:
+        return self.v_from_xy_(self.xy_from_rel_xy_(pos))
+    
+    cdef rt v_from_xy_indices_(self, int[2] pos) except *:
+        return (<rt *> self._arr)[pos[1] * self.width + pos[0]]
+    
+    cpdef rt v_from_vector(self, vector) except *:
+        return self.v_from_vector_(cp2v_3d(vector))
+    
+    cdef rt v_from_vector_(self, vec3 vector) except *:
+        return self.v_from_xy_(self.xy_from_vector(vector))
+    
+    # setters
+    cpdef void set_xy(self, pos, r) except *:
+        cdef int[2] pos_
+        pos_[0] = pos[0]
+        pos_[1] = pos[1]
+        self.set_xy_(pos_, r)
+    
+    cdef void set_xy_(self, int[2] pos, rt r) except *:
+        (<rt *> self._arr)[pos[1] * self.width + pos[0]] = r
+    
+    @cython.wraparound(False)
+    @cython.initializedcheck(False)
+    cdef rt sample(self, vec2 pos) except *:
+        """
+        Samples passed array at passed position.
+    
+        Passed x and y positions may be values other than an integer,
+        in which case the returned value will be a weighted average of
+        the surrounding positions in the array.
+        :param arr
+        :param pos vec2 indicating x, y position at which to sample array.
+        :param w int width of passed array
+        :return int
+        """
+        cdef int p0, p1, p2, p3  # relative array positions
+        cdef rt left0, left1, right0, right1, vf
+        cdef float a_mod, b_mod
+        cdef rt *arr = <rt *> self._arr
+    
+        pos = mu.vec2Add(pos, self._ref_pos)
+    
+        a = pos.x
+        b = pos.y
+        a_mod = a % 1
+        b_mod = b % 1
+    
+        p2 = (<int> pos.y) * self.width + (<int> pos.x)
+    
+        if a_mod and b_mod:
+            # if all 4 pixels are to be used
+            p3 = p2 + 1
+            p1 = p2 + self.width
+            p0 = p1 + 1
+    
+            left0 = arr[p2]
+            left1 = arr[p1]
+            right0 = arr[p3]
+            right1 = arr[p0]
+    
+            left0 = mix_region_(left1, b_mod, left0, (1 - b_mod))
+            right0 = mix_region_(right1, b_mod, right0, (1 - b_mod))
+            vf = mix_region_(right0, a_mod, left0, (1 - a_mod))
+        elif a_mod:  # if a_mod > 0 and b_mod == 0:
+            # if only one row
+            p3 = p2 + 1
+            left0 = arr[p2]
+            right0 = arr[p3]
+            vf = mix_region_(right0, a_mod, left0, (1 - a_mod))
+        elif b_mod:  # if b_mod > 0 and a_mod == 0:
+            # if only one column
+            p1 = p2 + self.width  # get pixel above base (p2) pixel
+            left0 = arr[p2]
+            left1 = arr[p1]
+            vf = mix_region_(left1, b_mod, left0, (1 - b_mod))
+        else:  # both a_mod and b_mod are 0.:
+            # if both passed values are whole numbers, just get the
+            # corresponding value
+            vf = arr[p2]
+    
+        return vf
+    
+    
+
+cdef class RegLatLonMap(LatLonMap):
+    
+    
+    cdef void _allocate_arr(self) except *:
+        self._arr = malloc(self.width * self.height * sizeof(rt))
+    
+    cdef void clone(self, AbstractMap p) except *:
+        if isinstance(p, RegCubeMap):
+            self.clone_(<RegCubeMap> p)
+        elif isinstance(p, RegLatLonMap):
+            self.clone_(<RegLatLonMap> p)
+        elif isinstance(p, RegTileMap):
+            self.clone_(<RegTileMap> p)
+        elif isinstance(p, RegCubeSide):
+            self.clone_(<RegCubeSide> p)
+        else:
+            raise TypeError(f'Unexpected prototype map type: {p}')
+    
+    cdef void clone_(self, reg_map_t p) except *:
+        cdef vec2 pos
+        cdef vec3 vector
+        cdef int[2] map_pos
+        cdef rt v
+        for x in range(self.width):
+            for y in range(self.height):
+                # get vector corresponding to position
+                pos.x = x
+                pos.y = y
+                vector = self.vector_from_xy_(pos)
+                v = p.v_from_vector_(vector)
+                map_pos[0] = x
+                map_pos[1] = y
+                self.set_xy_(map_pos, v)
+    
+    # value retrieval methods
+    cpdef rt v_from_lat_lon(self, pos) except *:
+        return self.v_from_lat_lon_(cp2ll(pos))
+    
+    cdef rt v_from_lat_lon_(self, latlon pos) except *:
+        return self.v_from_xy_(self.xy_from_lat_lon_(pos))
+    
+    cpdef rt v_from_xy(self, pos) except *:
+        return self.v_from_xy_(cp2v_2d(pos))
+    
+    cdef rt v_from_xy_(self, vec2 pos) except *:
+        return self.sample(pos)
+    
+    cpdef rt v_from_rel_xy(self, tuple pos) except *:
+        return self.v_from_rel_xy_(cp2v_2d(pos))
+    
+    cdef rt v_from_rel_xy_(self, vec2 pos) except *:
+        return self.v_from_xy_(self.xy_from_rel_xy_(pos))
+    
+    cdef rt v_from_xy_indices_(self, int[2] pos) except *:
+        return (<rt *> self._arr)[pos[1] * self.width + pos[0]]
+    
+    cpdef rt v_from_vector(self, vector) except *:
+        return self.v_from_vector_(cp2v_3d(vector))
+    
+    cdef rt v_from_vector_(self, vec3 vector) except *:
+        return self.v_from_xy_(self.xy_from_vector(vector))
+    
+    # setters
+    cpdef void set_xy(self, pos, r) except *:
+        cdef int[2] pos_
+        pos_[0] = pos[0]
+        pos_[1] = pos[1]
+        self.set_xy_(pos_, r)
+    
+    cdef void set_xy_(self, int[2] pos, rt r) except *:
+        (<rt *> self._arr)[pos[1] * self.width + pos[0]] = r
+    
+    @cython.wraparound(False)
+    @cython.initializedcheck(False)
+    cdef rt sample(self, vec2 pos) except *:
+        """
+        Samples passed array at passed position.
+    
+        Passed x and y positions may be values other than an integer,
+        in which case the returned value will be a weighted average of
+        the surrounding positions in the array.
+        :param arr
+        :param pos vec2 indicating x, y position at which to sample array.
+        :param w int width of passed array
+        :return int
+        """
+        cdef int p0, p1, p2, p3  # relative array positions
+        cdef rt left0, left1, right0, right1, vf
+        cdef float a_mod, b_mod
+        cdef rt *arr = <rt *> self._arr
+    
+        pos = mu.vec2Add(pos, self._ref_pos)
+    
+        a = pos.x
+        b = pos.y
+        a_mod = a % 1
+        b_mod = b % 1
+    
+        p2 = (<int> pos.y) * self.width + (<int> pos.x)
+    
+        if a_mod and b_mod:
+            # if all 4 pixels are to be used
+            p3 = p2 + 1
+            p1 = p2 + self.width
+            p0 = p1 + 1
+    
+            left0 = arr[p2]
+            left1 = arr[p1]
+            right0 = arr[p3]
+            right1 = arr[p0]
+    
+            left0 = mix_region_(left1, b_mod, left0, (1 - b_mod))
+            right0 = mix_region_(right1, b_mod, right0, (1 - b_mod))
+            vf = mix_region_(right0, a_mod, left0, (1 - a_mod))
+        elif a_mod:  # if a_mod > 0 and b_mod == 0:
+            # if only one row
+            p3 = p2 + 1
+            left0 = arr[p2]
+            right0 = arr[p3]
+            vf = mix_region_(right0, a_mod, left0, (1 - a_mod))
+        elif b_mod:  # if b_mod > 0 and a_mod == 0:
+            # if only one column
+            p1 = p2 + self.width  # get pixel above base (p2) pixel
+            left0 = arr[p2]
+            left1 = arr[p1]
+            vf = mix_region_(left1, b_mod, left0, (1 - b_mod))
+        else:  # both a_mod and b_mod are 0.:
+            # if both passed values are whole numbers, just get the
+            # corresponding value
+            vf = arr[p2]
+    
+        return vf
+    
+    
+
+cdef class RegTileMap(TileMap):
+    
+    
+    cdef void _allocate_arr(self) except *:
+        self._arr = malloc(self.width * self.height * sizeof(rt))
+    
+    cdef void clone(self, AbstractMap p) except *:
+        if isinstance(p, RegCubeMap):
+            self.clone_(<RegCubeMap> p)
+        elif isinstance(p, RegLatLonMap):
+            self.clone_(<RegLatLonMap> p)
+        elif isinstance(p, RegTileMap):
+            self.clone_(<RegTileMap> p)
+        elif isinstance(p, RegCubeSide):
+            self.clone_(<RegCubeSide> p)
+        else:
+            raise TypeError(f'Unexpected prototype map type: {p}')
+    
+    cdef void clone_(self, reg_map_t p) except *:
+        cdef vec2 pos
+        cdef vec3 vector
+        cdef int[2] map_pos
+        cdef rt v
+        for x in range(self.width):
+            for y in range(self.height):
+                # get vector corresponding to position
+                pos.x = x
+                pos.y = y
+                vector = self.vector_from_xy_(pos)
+                v = p.v_from_vector_(vector)
+                map_pos[0] = x
+                map_pos[1] = y
+                self.set_xy_(map_pos, v)
+    
+    # value retrieval methods
+    cpdef rt v_from_lat_lon(self, pos) except *:
+        return self.v_from_lat_lon_(cp2ll(pos))
+    
+    cdef rt v_from_lat_lon_(self, latlon pos) except *:
+        return self.v_from_xy_(self.xy_from_lat_lon_(pos))
+    
+    cpdef rt v_from_xy(self, pos) except *:
+        return self.v_from_xy_(cp2v_2d(pos))
+    
+    cdef rt v_from_xy_(self, vec2 pos) except *:
+        return self.sample(pos)
+    
+    cpdef rt v_from_rel_xy(self, tuple pos) except *:
+        return self.v_from_rel_xy_(cp2v_2d(pos))
+    
+    cdef rt v_from_rel_xy_(self, vec2 pos) except *:
+        return self.v_from_xy_(self.xy_from_rel_xy_(pos))
+    
+    cdef rt v_from_xy_indices_(self, int[2] pos) except *:
+        return (<rt *> self._arr)[pos[1] * self.width + pos[0]]
+    
+    cpdef rt v_from_vector(self, vector) except *:
+        return self.v_from_vector_(cp2v_3d(vector))
+    
+    cdef rt v_from_vector_(self, vec3 vector) except *:
+        return self.v_from_xy_(self.xy_from_vector(vector))
+    
+    # setters
+    cpdef void set_xy(self, pos, r) except *:
+        cdef int[2] pos_
+        pos_[0] = pos[0]
+        pos_[1] = pos[1]
+        self.set_xy_(pos_, r)
+    
+    cdef void set_xy_(self, int[2] pos, rt r) except *:
+        (<rt *> self._arr)[pos[1] * self.width + pos[0]] = r
+    
+    @cython.wraparound(False)
+    @cython.initializedcheck(False)
+    cdef rt sample(self, vec2 pos) except *:
+        """
+        Samples passed array at passed position.
+    
+        Passed x and y positions may be values other than an integer,
+        in which case the returned value will be a weighted average of
+        the surrounding positions in the array.
+        :param arr
+        :param pos vec2 indicating x, y position at which to sample array.
+        :param w int width of passed array
+        :return int
+        """
+        cdef int p0, p1, p2, p3  # relative array positions
+        cdef rt left0, left1, right0, right1, vf
+        cdef float a_mod, b_mod
+        cdef rt *arr = <rt *> self._arr
+    
+        pos = mu.vec2Add(pos, self._ref_pos)
+    
+        a = pos.x
+        b = pos.y
+        a_mod = a % 1
+        b_mod = b % 1
+    
+        p2 = (<int> pos.y) * self.width + (<int> pos.x)
+    
+        if a_mod and b_mod:
+            # if all 4 pixels are to be used
+            p3 = p2 + 1
+            p1 = p2 + self.width
+            p0 = p1 + 1
+    
+            left0 = arr[p2]
+            left1 = arr[p1]
+            right0 = arr[p3]
+            right1 = arr[p0]
+    
+            left0 = mix_region_(left1, b_mod, left0, (1 - b_mod))
+            right0 = mix_region_(right1, b_mod, right0, (1 - b_mod))
+            vf = mix_region_(right0, a_mod, left0, (1 - a_mod))
+        elif a_mod:  # if a_mod > 0 and b_mod == 0:
+            # if only one row
+            p3 = p2 + 1
+            left0 = arr[p2]
+            right0 = arr[p3]
+            vf = mix_region_(right0, a_mod, left0, (1 - a_mod))
+        elif b_mod:  # if b_mod > 0 and a_mod == 0:
+            # if only one column
+            p1 = p2 + self.width  # get pixel above base (p2) pixel
+            left0 = arr[p2]
+            left1 = arr[p1]
+            vf = mix_region_(left1, b_mod, left0, (1 - b_mod))
+        else:  # both a_mod and b_mod are 0.:
+            # if both passed values are whole numbers, just get the
+            # corresponding value
+            vf = arr[p2]
+    
+        return vf
+    
+    
+
+cdef class RegCubeSide(CubeSide):
+    
+    
+    cdef void _allocate_arr(self) except *:
+        self._arr = malloc(self.width * self.height * sizeof(rt))
+    
+    cdef void clone(self, AbstractMap p) except *:
+        if isinstance(p, RegCubeMap):
+            self.clone_(<RegCubeMap> p)
+        elif isinstance(p, RegLatLonMap):
+            self.clone_(<RegLatLonMap> p)
+        elif isinstance(p, RegTileMap):
+            self.clone_(<RegTileMap> p)
+        elif isinstance(p, RegCubeSide):
+            self.clone_(<RegCubeSide> p)
+        else:
+            raise TypeError(f'Unexpected prototype map type: {p}')
+    
+    cdef void clone_(self, reg_map_t p) except *:
+        cdef vec2 pos
+        cdef vec3 vector
+        cdef int[2] map_pos
+        cdef rt v
+        for x in range(self.width):
+            for y in range(self.height):
+                # get vector corresponding to position
+                pos.x = x
+                pos.y = y
+                vector = self.vector_from_xy_(pos)
+                v = p.v_from_vector_(vector)
+                map_pos[0] = x
+                map_pos[1] = y
+                self.set_xy_(map_pos, v)
+    
+    # value retrieval methods
+    cpdef rt v_from_lat_lon(self, pos) except *:
+        return self.v_from_lat_lon_(cp2ll(pos))
+    
+    cdef rt v_from_lat_lon_(self, latlon pos) except *:
+        return self.v_from_xy_(self.xy_from_lat_lon_(pos))
+    
+    cpdef rt v_from_xy(self, pos) except *:
+        return self.v_from_xy_(cp2v_2d(pos))
+    
+    cdef rt v_from_xy_(self, vec2 pos) except *:
+        return self.sample(pos)
+    
+    cpdef rt v_from_rel_xy(self, tuple pos) except *:
+        return self.v_from_rel_xy_(cp2v_2d(pos))
+    
+    cdef rt v_from_rel_xy_(self, vec2 pos) except *:
+        return self.v_from_xy_(self.xy_from_rel_xy_(pos))
+    
+    cdef rt v_from_xy_indices_(self, int[2] pos) except *:
+        return (<rt *> self._arr)[pos[1] * self.width + pos[0]]
+    
+    cpdef rt v_from_vector(self, vector) except *:
+        return self.v_from_vector_(cp2v_3d(vector))
+    
+    cdef rt v_from_vector_(self, vec3 vector) except *:
+        return self.v_from_xy_(self.xy_from_vector(vector))
+    
+    # setters
+    cpdef void set_xy(self, pos, r) except *:
+        cdef int[2] pos_
+        pos_[0] = pos[0]
+        pos_[1] = pos[1]
+        self.set_xy_(pos_, r)
+    
+    cdef void set_xy_(self, int[2] pos, rt r) except *:
+        (<rt *> self._arr)[pos[1] * self.width + pos[0]] = r
+    
+    @cython.wraparound(False)
+    @cython.initializedcheck(False)
+    cdef rt sample(self, vec2 pos) except *:
+        """
+        Samples passed array at passed position.
+    
+        Passed x and y positions may be values other than an integer,
+        in which case the returned value will be a weighted average of
+        the surrounding positions in the array.
+        :param arr
+        :param pos vec2 indicating x, y position at which to sample array.
+        :param w int width of passed array
+        :return int
+        """
+        cdef int p0, p1, p2, p3  # relative array positions
+        cdef rt left0, left1, right0, right1, vf
+        cdef float a_mod, b_mod
+        cdef rt *arr = <rt *> self._arr
+    
+        pos = mu.vec2Add(pos, self._ref_pos)
+    
+        a = pos.x
+        b = pos.y
+        a_mod = a % 1
+        b_mod = b % 1
+    
+        p2 = (<int> pos.y) * self.width + (<int> pos.x)
+    
+        if a_mod and b_mod:
+            # if all 4 pixels are to be used
+            p3 = p2 + 1
+            p1 = p2 + self.width
+            p0 = p1 + 1
+    
+            left0 = arr[p2]
+            left1 = arr[p1]
+            right0 = arr[p3]
+            right1 = arr[p0]
+    
+            left0 = mix_region_(left1, b_mod, left0, (1 - b_mod))
+            right0 = mix_region_(right1, b_mod, right0, (1 - b_mod))
+            vf = mix_region_(right0, a_mod, left0, (1 - a_mod))
+        elif a_mod:  # if a_mod > 0 and b_mod == 0:
+            # if only one row
+            p3 = p2 + 1
+            left0 = arr[p2]
+            right0 = arr[p3]
+            vf = mix_region_(right0, a_mod, left0, (1 - a_mod))
+        elif b_mod:  # if b_mod > 0 and a_mod == 0:
+            # if only one column
+            p1 = p2 + self.width  # get pixel above base (p2) pixel
+            left0 = arr[p2]
+            left1 = arr[p1]
+            vf = mix_region_(left1, b_mod, left0, (1 - b_mod))
+        else:  # both a_mod and b_mod are 0.:
+            # if both passed values are whole numbers, just get the
+            # corresponding value
+            vf = arr[p2]
+    
+        return vf
+    
+    
+
     
     
 #######################################################################
@@ -2892,3 +3686,145 @@ ELSE:
         lat_lon.lat = atan2(z, sqrt(pow(x, 2) + pow(y, 2)))
         lat_lon.lon = atan2(y, x)
         return lat_lon
+
+
+#######################################################################
+# DATA FUNCTIONS
+#######################################################################
+
+
+cpdef rt pure_region(int region_code) except *:
+    return pure_region_(region_code)
+
+
+cdef rt pure_region_(int region_code) except *:
+    cdef rt r
+
+    if not 0 <= region_code < 256:
+        raise ValueError(
+            f'region code was outside valid range (0-255): {region_code}')
+
+    r.r0 = region_code
+    r.w0 = 1.
+    r.r1 = r.r2 = r.r3 = 0
+    r.w1 = r.w2 = r.w3 = 0.
+
+    return r
+
+
+cpdef rt mix_region(rt r0, float w0, rt r1, float w1) except *:
+    return mix_region_(r0, w0, r1, w1)
+
+
+cdef rt mix_region_(rt r0, float w0, rt r1, float w1) except *:
+    # adjust weights if they do not sum to 1.
+    if w0 + w1 != 1.:
+        sum = w0 + w1
+        w0 = w0 / sum
+        w1 = w1 / sum
+
+    # check that each of the two regions have no more than 2
+    # region codes
+    if r0.w2 or r0.w3:
+        raise ValueError(f'r0 has > 2 region codes: {r0}')
+    if r1.w2 or r1.w3:
+        raise ValueError(f'r1 has > 2 region codes: {r1}')
+
+    # get region codes that will be mixed
+    rc0 = r0.r0
+    rc1 = r0.r1
+    rc2 = r1.r0 if r1.r0 != r0.r0 and r1.r0 != r0.r1 else 0
+    rc3 = r1.r1 if r1.r1 != r0.r0 and r1.r1 != r0.r1 else 0
+
+    # get region code weights
+    if rc0 != 0:
+        rc0w = _get_region_wt(r0, rc0) * w0 + _get_region_wt(r1, rc0) * w1
+    else:
+        rc0w = 0.
+    if rc1 != 0:
+        rc1w = _get_region_wt(r0, rc1) * w0 + _get_region_wt(r1, rc1) * w1
+    else:
+        rc1w = 0.
+    if rc2 != 0:
+        rc2w = _get_region_wt(r0, rc2) * w0 + _get_region_wt(r1, rc2) * w1
+    else:
+        rc2w = 0.
+    if rc3 != 0:
+        rc3w = _get_region_wt(r0, rc3) * w0 + _get_region_wt(r1, rc3) * w1
+    else:
+        rc3w = 0.
+    
+    return _make_region(rc0, rc0w, rc1, rc1w, rc2, rc2w, rc3, rc3w)
+
+
+cdef float _get_region_wt(rt r, int region_code):
+    """
+    Gets weight of region code in passed region type
+    """
+    if r.r0 == region_code:
+        return r.w0
+    elif r.r1 == region_code:
+        return r.w1
+    elif r.r2 == region_code:
+        return r.w2
+    elif r.r3 == region_code:
+        return r.w3
+    else:
+        return 0.
+
+
+cdef rt _make_region(r0, w0, r1, w1, r2, w2, r3, w3):
+    cdef rt r
+    r.r0 = r0
+    r.r1 = r1
+    r.r2 = r2
+    r.r3 = r3
+    r.w0 = w0
+    r.w1 = w1
+    r.w2 = w2
+    r.w3 = w3
+    return _sort_region(r)
+
+
+cdef rt _sort_region(rt r):
+    cdef bint sort = True  # whether sorting should continue
+
+    while sort:
+        sort = False  # reset flag
+        if r.w0 < r.w1:
+            sort = True
+            r.w0, r.w1 = r.w1, r.w0
+            r.r0, r.r1 = r.r1, r.r0
+        if r.w1 < r.w2:
+            sort = True
+            r.w1, r.w2 = r.w2, r.w1
+            r.r1, r.r2 = r.r2, r.r1
+        if r.w2 < r.w3:
+            sort = True
+            r.w2, r.w3 = r.w3, r.w2
+            r.r2, r.r3 = r.r3, r.r2
+
+    return r
+
+cpdef mix_av(v0, float w0, v1, float w1):
+    cdef av v0_, v1_
+    v0_.x = v0[0]
+    v0_.y = v0[1]
+    v1_.x = v1[0]
+    v1_.y = v1[1]
+    cdef av r = mix_av_(v0_, w0, v1_, w1)
+    return r.x, r.y
+
+cdef av mix_av_(av v0, float w0, av v1, float w1) except *:
+    cdef av vf
+
+    # adjust weights if needed
+    if w0 + w1 != 1.:
+        sum = w0 + w1
+        w0 = w0 / sum
+        w1 = w1 / sum
+
+    vf.x = v0.x * w0 + v1.x * w1
+    vf.y = v0.y * w0 + v1.y * w1
+
+    return vf

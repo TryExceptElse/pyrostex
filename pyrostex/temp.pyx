@@ -16,6 +16,7 @@ from .map cimport GreyCubeMap, lat_lon_from_vector_
 
 include "flags.pxi"
 
+DEF MAX_LAT = 1.57079632679489661923132169163975144209855
 
 DEF ATM_M = 0.029  # molar mass of atmosphere
 DEF R = 8.3144598  # gas constant
@@ -71,10 +72,6 @@ cpdef GreyCubeMap make_warming_map(
             t = find_cs_ratio(lat_lon.lat) * no_atm_temp
             if not 0 <= t <= MAX_T:
                 assert False, t  # sanity check
-            # apply effects of elevation
-            # if base_atm > 0:
-            #     p = find_pressure(h, base_atm, t, base_gravity)
-            #     t += ((p / base_atm) * 2 - 1) * atm_warming
             if not 0 <= t <= MAX_T:
                 assert False, (t, base_atm)  # sanity check
             warming_map.set_xy_(xy_int_pos, t)

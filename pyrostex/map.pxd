@@ -9,8 +9,16 @@ from includes.cmathutils cimport vec2, vec3, mat3x3
 from includes.structs cimport latlon
 
 ctypedef float a_t  # array type
+
 ctypedef struct av:  # array vector
     a_t x, y
+
+ctypedef struct rt:  # region type
+    unsigned char r0, r1, r2, r3
+    float w0, w1, w2, w3
+
+ctypedef struct rgb_t:  # stores rgba color
+    unsigned char r, g, b, a
 
 ctypedef fused grey_map_t:
     GreyCubeMap
@@ -24,15 +32,19 @@ ctypedef fused vec_map_t:
     VecTileMap
     VecCubeSide
 
-ctypedef fused map_t:
-    GreyCubeMap
-    GreyLatLonMap
-    GreyTileMap
-    GreyCubeSide
-    VecCubeMap
-    VecLatLonMap
-    VecTileMap
-    VecCubeSide
+ctypedef fused reg_map_t:
+    RegCubeMap
+    RegLatLonMap
+    RegTileMap
+    RegCubeSide
+
+"""
+ctypedef fused rgb_map_t:
+    RgbCubeMap
+    RgbLatLonMap
+    RgbTileMap
+    RgbCubeSide
+"""
 
 #######################################################################
 # DECLARATION MACROS
@@ -44,6 +56,8 @@ GREY_DATA_DECLARATIONS = ''  # Macro placeholder
 # vector map declarations
 VECTOR_DATA_DECLARATIONS = ''  # Macro placeholder
 
+# region map declarations
+REGION_DATA_DECLARATIONS = ''  # Macro placeholder
 
 #######################################################################
 # ABSTRACT MAPS
@@ -143,6 +157,7 @@ cdef class CubeSide(TileMap):
 #######################################################################
 # TEXTURE MAPS  (Floating Point Maps)
 #######################################################################
+
 
 cdef class GreyCubeMap(CubeMap):
     
@@ -312,9 +327,11 @@ cdef class GreyCubeSide(CubeSide):
     
     
 
+
 #######################################################################
 # VECTOR MAPS
 #######################################################################
+
 
 cdef class VecCubeMap(CubeMap):
     
@@ -335,6 +352,8 @@ cdef class VecCubeMap(CubeMap):
     # setters
     cpdef void set_xy(self, pos, vec) except *
     cdef void set_xy_(self, int[2] pos, av vec) except *
+    
+    cdef av sample(self, vec2 pos) except *
     
     
 
@@ -358,6 +377,8 @@ cdef class VecLatLonMap(LatLonMap):
     cpdef void set_xy(self, pos, vec) except *
     cdef void set_xy_(self, int[2] pos, av vec) except *
     
+    cdef av sample(self, vec2 pos) except *
+    
     
 
 cdef class VecTileMap(TileMap):
@@ -379,6 +400,8 @@ cdef class VecTileMap(TileMap):
     # setters
     cpdef void set_xy(self, pos, vec) except *
     cdef void set_xy_(self, int[2] pos, av vec) except *
+    
+    cdef av sample(self, vec2 pos) except *
     
     
 
@@ -402,7 +425,112 @@ cdef class VecCubeSide(CubeSide):
     cpdef void set_xy(self, pos, vec) except *
     cdef void set_xy_(self, int[2] pos, av vec) except *
     
+    cdef av sample(self, vec2 pos) except *
     
+    
+
+
+#######################################################################
+# REGION MAPS
+#######################################################################
+
+
+cdef class RegCubeMap(CubeMap):
+    
+    
+    cdef void clone_(self, reg_map_t p) except *
+    
+    # value retrieval methods
+    cpdef rt v_from_lat_lon(self, pos) except *
+    cdef rt v_from_lat_lon_(self, latlon pos) except *
+    cpdef rt v_from_xy(self, pos) except *
+    cdef rt v_from_xy_(self, vec2 pos) except *
+    cpdef rt v_from_rel_xy(self, tuple pos) except *
+    cdef rt v_from_rel_xy_(self, vec2 pos) except *
+    cdef rt v_from_xy_indices_(self, int[2] pos) except *
+    cpdef rt v_from_vector(self, vector) except *
+    cdef rt v_from_vector_(self, vec3 vector) except *
+    
+    # setters
+    cpdef void set_xy(self, pos, r) except *
+    cdef void set_xy_(self, int[2] pos, rt r) except *
+    
+    cdef rt sample(self, vec2 pos) except *
+    
+    
+
+cdef class RegLatLonMap(LatLonMap):
+    
+    
+    cdef void clone_(self, reg_map_t p) except *
+    
+    # value retrieval methods
+    cpdef rt v_from_lat_lon(self, pos) except *
+    cdef rt v_from_lat_lon_(self, latlon pos) except *
+    cpdef rt v_from_xy(self, pos) except *
+    cdef rt v_from_xy_(self, vec2 pos) except *
+    cpdef rt v_from_rel_xy(self, tuple pos) except *
+    cdef rt v_from_rel_xy_(self, vec2 pos) except *
+    cdef rt v_from_xy_indices_(self, int[2] pos) except *
+    cpdef rt v_from_vector(self, vector) except *
+    cdef rt v_from_vector_(self, vec3 vector) except *
+    
+    # setters
+    cpdef void set_xy(self, pos, r) except *
+    cdef void set_xy_(self, int[2] pos, rt r) except *
+    
+    cdef rt sample(self, vec2 pos) except *
+    
+    
+
+cdef class RegTileMap(TileMap):
+    
+    
+    cdef void clone_(self, reg_map_t p) except *
+    
+    # value retrieval methods
+    cpdef rt v_from_lat_lon(self, pos) except *
+    cdef rt v_from_lat_lon_(self, latlon pos) except *
+    cpdef rt v_from_xy(self, pos) except *
+    cdef rt v_from_xy_(self, vec2 pos) except *
+    cpdef rt v_from_rel_xy(self, tuple pos) except *
+    cdef rt v_from_rel_xy_(self, vec2 pos) except *
+    cdef rt v_from_xy_indices_(self, int[2] pos) except *
+    cpdef rt v_from_vector(self, vector) except *
+    cdef rt v_from_vector_(self, vec3 vector) except *
+    
+    # setters
+    cpdef void set_xy(self, pos, r) except *
+    cdef void set_xy_(self, int[2] pos, rt r) except *
+    
+    cdef rt sample(self, vec2 pos) except *
+    
+    
+
+cdef class RegCubeSide(CubeSide):
+    
+    
+    cdef void clone_(self, reg_map_t p) except *
+    
+    # value retrieval methods
+    cpdef rt v_from_lat_lon(self, pos) except *
+    cdef rt v_from_lat_lon_(self, latlon pos) except *
+    cpdef rt v_from_xy(self, pos) except *
+    cdef rt v_from_xy_(self, vec2 pos) except *
+    cpdef rt v_from_rel_xy(self, tuple pos) except *
+    cdef rt v_from_rel_xy_(self, vec2 pos) except *
+    cdef rt v_from_xy_indices_(self, int[2] pos) except *
+    cpdef rt v_from_vector(self, vector) except *
+    cdef rt v_from_vector_(self, vec3 vector) except *
+    
+    # setters
+    cpdef void set_xy(self, pos, r) except *
+    cdef void set_xy_(self, int[2] pos, rt r) except *
+    
+    cdef rt sample(self, vec2 pos) except *
+    
+    
+
 
 #######################################################################
 # FUNCTIONS
@@ -417,3 +545,16 @@ IF ASSERTS:
 ELSE:
     cdef latlon lat_lon_from_vector_(vec3 vector)
     cdef vec3 vector_from_lat_lon_(latlon lat_lon)
+
+
+#######################################################################
+# DATA FUNCTIONS
+#######################################################################
+
+cpdef rt pure_region(int region_code) except *
+cdef rt pure_region_(int region_code) except *
+cpdef rt mix_region(rt r0, float w0, rt r1, float w1) except *
+cdef rt mix_region_(rt r0, float w0, rt r1, float w1) except *
+
+cpdef mix_av(v0, float w0, v1, float w1)
+cdef av mix_av_(av v0, float w0, av v1, float w1) except *

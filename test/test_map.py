@@ -5,6 +5,7 @@ from mathutils import Vector
 
 from pyrostex import map
 from pyrostex.map import GreyLatLonMap, GreyCubeMap, GreyCubeSide
+from pyrostex.map import mix_region, pure_region, mix_av
 
 
 class TestCubeMap(TestCase):
@@ -203,3 +204,53 @@ class TestFunctions(TestCase):
     def test_latitude_converts_to_vector_correctly(self):
         vector = map.vector_from_lat_lon((radians(45), 0))
         self.assertEqual(vector.x, vector.z)
+
+
+class TestVec2Mixing(TestCase):
+    def test_vec_can_be_mixed1(self):
+        r = mix_av((1, 0.4), 0.75, (0, 0), 0.25)
+        self.assertAlmostEqual(0.75, r[0])
+        self.assertAlmostEqual(0.3, r[1])
+
+    def test_vec_can_be_mixed2(self):
+        r = mix_av((1, 0.4), 3, (0, 0), 1)
+        self.assertAlmostEqual(0.75, r[0])
+        self.assertAlmostEqual(0.3, r[1])
+
+    def test_vec_can_be_mixed3(self):
+        r = mix_av((1, 0.4), 1, (0.5, 0.1), 1)
+        self.assertAlmostEqual(0.75, r[0])
+        self.assertAlmostEqual(0.25, r[1])
+
+
+class TestRegionConversions(TestCase):
+    def test_pure_region_can_be_created_correctly(self):
+        r = pure_region(2)
+        self.assertEqual(2, r['r0'])
+        self.assertEqual(0, r['r1'])
+        self.assertEqual(0, r['r2'])
+        self.assertEqual(0, r['r3'])
+        self.assertEqual(1, r['w0'])
+        self.assertEqual(0, r['w1'])
+        self.assertEqual(0, r['w2'])
+        self.assertEqual(0, r['w3'])
+
+    def test_two_regions_are_mixed_correctly(self):
+        r0 = pure_region(1)
+        r1 = pure_region(2)
+        rf = mix_region(r0, 0.75, r1, 0.25)
+        self.assertEqual(1, rf['r0'])
+        self.assertEqual(2, rf['r1'])
+        self.assertEqual(0.75, rf['w0'])
+        self.assertEqual(0.25, rf['w1'])
+
+    def test_four_regions_are_mixed_correctly(self):
+        r0 = pure_region(1)
+        r1 = pure_region(2)
+        r2 = pure_region(3)
+        r3 = pure_region(4)
+        r_left = mix_region(r1, 0.75, r2, 0.25)
+        r_right = mix_region(r0, 0.75, r3, 0.25)
+        rf = mix_region(r_left, 0.75, r_right, 0.25)
+        self.assertEqual(2, rf['r0'])
+        self.assertEqual(4, rf['r3'])
