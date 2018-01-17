@@ -94,7 +94,11 @@ setup(
                 name='pyrostex.map',
                 sources=['pyrostex/map.pyx.cm'],
                 extra_compile_args=["-ffast-math", "-Ofast"],
-                # language='c++',
+            ),
+            Extension(
+                name='pyrostex.brush',
+                sources=['pyrostex/brush.pyx'],
+                extra_compile_args=["-ffast-math", "-Ofast"],
             ),
             Extension(
                 name='pyrostex.temp',

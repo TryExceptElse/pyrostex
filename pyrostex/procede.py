@@ -217,7 +217,7 @@ class Spheroid:
 
 class HeightField:
     """
-    Handles information from height field file
+    Handles information from height field file.
     """
 
     def __init__(self, path):
@@ -241,7 +241,7 @@ class HeightField:
     @property
     def filled_range(self):
         """
-        Gets range of rows with useful data
+        Gets range of rows with useful data.
         :return: range
         """
         with open(self.path, 'r') as f:
@@ -271,3 +271,37 @@ class HeightField:
             rng = self.filled_range
             for row in f.readlines()[slice(rng.start, rng.stop)]:
                 yield [int(n) for n in row.rstrip().split()]
+
+
+class Tile:
+    """
+    Handles generation of data for a tile belonging to a Spheroid.
+    """
+
+    def __init__(self, spheroid, face, parent=None, p1=(-1, -1), p2=(1, 1)):
+        """
+        Initializes sub-tile of a spheroid.
+        :param spheroid: Spheroid
+        :param parent: tile parent
+        :param face: index of the cube face on which this tile resides.
+        :param p1: lower left tile corner position, with valid range
+                being (-1, 1)
+        :param p2: upper right tile corner position, with valid range
+                being (-1, 1)
+        """
+        # validate data
+        if p1[0] > p2[0] or p1[1] > p2[1]:
+            raise ValueError(
+                'p1, p2 mismatch: p1: {}, p2: {}'.format(p1, p2))
+        self.spheroid = spheroid
+        self.parent = parent
+        self.face = face
+        self.p1 = p1
+        self.p2 = p2
+        self.rel_width = p2[0] - p1[0]  # width relative to spheroid
+
+        self.sub_tiles = []
+
+    def make_sub_tile(self, index):
+        if not 0 <= index < 4:
+            raise ValueError('Unexpected index received: {}'.format(index))

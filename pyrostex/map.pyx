@@ -3802,14 +3802,10 @@ cdef float _get_region_wt(rt r, int region_code):
 
 
 cdef rt _make_region(
-        int r0,
-        float w0,
-        int r1,
-        float w1,
-        int r2,
-        float w2,
-        int r3,
-        float w3):
+        int r0, float w0,
+        int r1, float w1,
+        int r2, float w2,
+        int r3, float w3):
     """
     Creates a region struct from passed data
     :return rt
