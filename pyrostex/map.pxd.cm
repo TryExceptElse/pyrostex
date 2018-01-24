@@ -2,8 +2,8 @@ include "flags.pxi"
 
 from cymacro import macro  # dummy function for defining macros
 
-from includes.cmathutils cimport vec2, vec3, mat3x3
-from includes.structs cimport latlon
+from .includes.cmathutils cimport vec2, vec3, mat3x3
+from .includes.structs cimport latlon
 
 ctypedef float a_t  # array type
 
@@ -65,7 +65,7 @@ cdef a_t v_from_vector_(self, vec3 vector) except? -1.
 
 # value setters
 cpdef void set_xy(self, pos, v) except *
-cdef void set_xy_(self, int[2] pos, a_t v) except *
+cdef void set_xy_(self, int[2] pos, a_t v) nogil except *
 
 # TextureMap specific methods
 cpdef object gradient_from_xy(self, tuple[double] pos)
@@ -82,7 +82,7 @@ cdef inline void r_px_(self, int[2] new_pos, int[2] old_pos)
 cdef inline void u_px_(self, int[2] new_pos, int[2] old_pos)
 cdef inline void ur_px_(self, int[2] new_pos, int[2] old_pos)
 
-cdef a_t sample(self, vec2 pos) except? -1.
+cdef a_t sample(self, vec2 pos) nogil except? -1.
 
 cdef double gauss_smooth_xy_(
         self, vec2 pos, double radius, int samples) except -1.
@@ -107,9 +107,9 @@ cdef av v_from_vector_(self, vec3 vector) except *
 
 # setters
 cpdef void set_xy(self, pos, vec) except *
-cdef void set_xy_(self, int[2] pos, av vec) except *
+cdef void set_xy_(self, int[2] pos, av vec) nogil except *
 
-cdef av sample(self, vec2 pos) except *
+cdef av sample(self, vec2 pos) nogil except *
 
 """)
 
@@ -131,9 +131,9 @@ cdef rt v_from_vector_(self, vec3 vector) except *
 
 # setters
 cpdef void set_xy(self, pos, r) except *
-cdef void set_xy_(self, int[2] pos, rt r) except *
+cdef void set_xy_(self, int[2] pos, rt r) nogil except *
 
-cdef rt sample(self, vec2 pos) except *
+cdef rt sample(self, vec2 pos) nogil except *
 
 """)
 
@@ -174,9 +174,9 @@ cdef class AbstractMap:
 
     # other conversion methods
     cpdef object vector_from_xy(self, pos)
-    cdef vec3 vector_from_xy_(self, vec2 pos) except *
+    cdef vec3 vector_from_xy_(self, vec2 pos) nogil except *
     cpdef tuple lat_lon_from_xy(self, tuple pos)
-    cdef latlon lat_lon_from_xy_(self, vec2 xy_pos) except *
+    cdef latlon lat_lon_from_xy_(self, vec2 xy_pos) nogil except *
 
     # out
     cpdef void write_png(self, unicode out) except *
@@ -201,10 +201,10 @@ cdef class CubeMap(AbstractMap):
     cdef CubeSide tile_from_vector_(self, vec3 vector)
     cdef int tile_index_from_vector_(self, vec3 vector)
     cpdef short tile_index_from_xy(self, pos)
-    cdef short tile_index_from_xy_(self, vec2 pos)
-    cdef vec3 vector_from_tile_xy_(self, int tile_index, vec2 pos) except *
+    cdef short tile_index_from_xy_(self, vec2 pos) nogil
+    cdef vec3 vector_from_tile_xy_(self, int tile_index, vec2 pos) nogil except *
     cpdef get_reference_position(self, tile_index)
-    cdef vec2 reference_position_(self, int tile_index) except *
+    cdef vec2 reference_position_(self, int tile_index) nogil except *
 
 
 cdef class LatLonMap(AbstractMap):
@@ -294,11 +294,11 @@ cdef class RegCubeSide(CubeSide):
 cpdef vector_from_lat_lon(pos)
 cpdef lat_lon_from_vector(vector)
 IF ASSERTS:
-    cdef latlon lat_lon_from_vector_(vec3 vector) except *
-    cdef vec3 vector_from_lat_lon_(latlon lat_lon) except *
+    cdef latlon lat_lon_from_vector_(vec3 vector) nogil except *
+    cdef vec3 vector_from_lat_lon_(latlon lat_lon) nogil except *
 ELSE:
-    cdef latlon lat_lon_from_vector_(vec3 vector)
-    cdef vec3 vector_from_lat_lon_(latlon lat_lon)
+    cdef latlon lat_lon_from_vector_(vec3 vector) nogil
+    cdef vec3 vector_from_lat_lon_(latlon lat_lon) nogil
 
 
 #######################################################################
@@ -306,9 +306,9 @@ ELSE:
 #######################################################################
 
 cpdef rt pure_region(int region_code) except *
-cdef rt pure_region_(int region_code) except *
+cdef rt pure_region_(int region_code) nogil except *
 cpdef rt mix_region(rt r0, float w0, rt r1, float w1) except *
-cdef rt mix_region_(rt r0, float w0, rt r1, float w1) except *
+cdef rt mix_region_(rt r0, float w0, rt r1, float w1) nogil except *
 
 cpdef mix_av(v0, float w0, v1, float w1)
-cdef av mix_av_(av v0, float w0, av v1, float w1) except *
+cdef av mix_av_(av v0, float w0, av v1, float w1) nogil except *

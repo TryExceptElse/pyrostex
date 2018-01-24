@@ -9,6 +9,7 @@ include "flags.pxi"  # debug, assert, etc flags
 cimport cython
 
 from .noise.noise cimport PyFastNoise
+from .includes.cmathutils cimport vec3Normalize
 
 from libc.math cimport sqrt
 
@@ -62,8 +63,7 @@ cpdef VecCubeMap make_wind_map(
     cdef GreyCubeMap noise_map = \
         _make_noise_map(seed, width, height, radius, 3)
 
-    cdef GreyCubeMap smoothed_pressure = \
-        _make_pressure_map(warming_map)
+    # cdef GreyCubeMap smoothed_pressure = _make_pressure_map(warming_map)
 
 
 cdef GreyCubeMap _make_noise_map(
@@ -95,8 +95,8 @@ cdef GreyCubeMap _make_noise_map(
         for y in range(height):
             pos[1] = y
             dbl_pos.y = y
-            vec = noise_map.vector_from_xy_(dbl_pos)
-            v = int(n.get_simplex_fractal_3d(vec.x, vec.y, vec.z) *
+            vec = vec3Normalize(noise_map.vector_from_xy_(dbl_pos))
+            v = int(n.get_simplex_fractal_3d_(vec) *
                     NOISE_SCALE + MEAN_NOISE_V)
             noise_map.set_xy_(pos, v)
 

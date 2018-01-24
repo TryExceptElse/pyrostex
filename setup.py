@@ -106,6 +106,12 @@ setup(
                 extra_compile_args=["-ffast-math", "-Ofast"]
             ),
             Extension(
+                name='pyrostex.height',
+                sources=['pyrostex/height.pyx'],
+                language='c++',
+                extra_compile_args=["-ffast-math", "-Ofast"]
+            ),
+            Extension(
                 name='pyrostex.wind',
                 sources=['pyrostex/wind.pyx'],
                 language='c++',

@@ -80,3 +80,28 @@ cdef class PyFastNoise:
     cpdef float get_perlin_fractal_3d(
             PyFastNoise self, float x, float y, float z):
         return self.n.GetPerlinFractal(x, y, z)
+        
+    
+    cdef float get_simplex_2d_          (PyFastNoise self, const vec2 p) nogil:
+        return self.n.GetSimplex(p.x, p.y)
+        
+    cdef float get_simplex_fractal_2d_  (PyFastNoise self, const vec2 p) nogil:
+        return self.n.GetSimplexFractal(p.x, p.y)
+        
+    cdef float get_perlin_2d_           (PyFastNoise self, const vec2 p) nogil:
+        return self.n.GetPerlin(p.x, p.y)
+        
+    cdef float get_perlin_fractal_2d_   (PyFastNoise self, const vec2 p) nogil:
+        return self.n.GetPerlinFractal(p.x, p.y)
+        
+    cdef float get_simplex_3d_          (PyFastNoise self, const vec3 p) nogil:
+        return self.n.GetPerlin(p.x, p.y, p.z)
+        
+    cdef float get_simplex_fractal_3d_  (PyFastNoise self, const vec3 p) nogil:
+        return self.n.GetSimplexFractal(p.x, p.y, p.z)
+        
+    cdef float get_perlin_3d_           (PyFastNoise self, const vec3 p) nogil:
+        return self.n.GetPerlin(p.x, p.y, p.z)
+        
+    cdef float get_perlin_fractal_3d_   (PyFastNoise self, const vec3 p) nogil:
+        return self.n.GetPerlinFractal(p.x, p.y, p.z)

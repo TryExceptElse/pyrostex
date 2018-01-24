@@ -192,14 +192,16 @@ cdef class AbstractMap:
     cpdef object vector_from_xy(self, pos):
         raise NotImplementedError()
 
-    cdef vec3 vector_from_xy_(self, vec2 pos) except *:
-        raise NotImplementedError()
+    cdef vec3 vector_from_xy_(self, vec2 pos) nogil except *:
+        with gil:
+            raise NotImplementedError()
 
     cpdef tuple lat_lon_from_xy(self, tuple pos):
         raise NotImplementedError()
 
-    cdef latlon lat_lon_from_xy_(self, vec2 xy_pos) except *:
-        raise NotImplementedError()
+    cdef latlon lat_lon_from_xy_(self, vec2 xy_pos) nogil except *:
+        with gil:
+            raise NotImplementedError()
 
     # Out
 
@@ -264,7 +266,7 @@ cdef class CubeMap(AbstractMap):
         """
         Gets pixel value at passed position on this map.
         :param vector: Vector (x, y, z)
-        :return:
+        :return: x, y
         """
         return self.xy_from_vector_(cp2v_3d(vector))
 
@@ -351,17 +353,19 @@ cdef class CubeMap(AbstractMap):
         return self.tile_index_from_xy_(cp2v_2d(pos))
 
     @cython.cdivision(True)
-    cdef short tile_index_from_xy_(self, vec2 pos):
+    cdef short tile_index_from_xy_(self, vec2 pos) nogil:
         """
         Private method for finding the index corresponding to
         a passed position.
         """
         if not 0 <= pos.x < self.width:
-            raise ValueError(
-                'x {} outside range: 0-{}'.format(pos.x, self.width))
+            with gil:
+                raise ValueError(
+                    'x {} outside range: 0-{}'.format(pos.x, self.width))
         if not 0 <= pos.y < self.height:
-            raise ValueError(
-                'y {} outside range: 0-{}'.format(pos.y, self.height))
+            with gil:
+                raise ValueError(
+                    'y {} outside range: 0-{}'.format(pos.y, self.height))
         if pos.x < self.tile_width:
             i = 0
         elif pos.x < self.two_thirds_width:
@@ -378,13 +382,14 @@ cdef class CubeMap(AbstractMap):
         return Vector((vector_.x, vector_.y, vector_.z))
 
     @cython.wraparound(False)
-    cdef vec3 vector_from_xy_(self, vec2 pos) except *:
+    cdef vec3 vector_from_xy_(self, vec2 pos) nogil except *:
         cdef vec2 tile_ref_pos
         cdef vec2 rel_pos
 
         IF ASSERTS:
-            assert 0 <= pos.x <= self.width - 1, pos.x
-            assert 0 <= pos.y <= self.height - 1, pos.y
+            with gil:
+                assert 0 <= pos.x <= self.width - 1, pos.x
+                assert 0 <= pos.y <= self.height - 1, pos.y
 
         tile_index = self.tile_index_from_xy_(pos)
         tile_ref_pos = self.reference_position_(tile_index)
@@ -394,18 +399,20 @@ cdef class CubeMap(AbstractMap):
 
     @cython.cdivision(True)
     @cython.wraparound(False)
-    cdef vec3 vector_from_tile_xy_(self, int tile_index, vec2 pos) except *:
+    cdef vec3 vector_from_tile_xy_(self, int tile_index, vec2 pos) nogil except *:
         """
         Gets vector from xy position of passed face tile
         """
         cdef vec3 vector
         a_index, b_index = pos.x, pos.y
         if not 0 <= a_index < self.tile_width:
-            raise ValueError('Passed x {} was outside range 0-{}'
-                             .format(a_index, self.tile_width))
+            with gil:
+                raise ValueError('Passed x {} was outside range 0-{}'
+                                 .format(a_index, self.tile_width))
         if not 0 <= b_index < self.tile_height:
-            raise ValueError('Passed y {} was outside range 0-{}'
-                             .format(b_index, self.tile_height))
+            with gil:
+                raise ValueError('Passed y {} was outside range 0-{}'
+                                 .format(b_index, self.tile_height))
         min_rel_x = -1
         min_rel_y = -1
         max_rel_x = 1
@@ -437,10 +444,11 @@ cdef class CubeMap(AbstractMap):
         elif tile_index == 5:
             vector.x, vector.y, vector.z = -a, b, -1
         else:
-            raise ValueError('Invalid face index: {}'.format(tile_index))
+            with gil:
+                raise ValueError('Invalid face index: {}'.format(tile_index))
         return vector
 
-    cdef latlon lat_lon_from_xy_(self, vec2 xy_pos) except *:
+    cdef latlon lat_lon_from_xy_(self, vec2 xy_pos) nogil except *:
         return lat_lon_from_vector_(self.vector_from_xy_(xy_pos))
 
     cpdef get_reference_position(self, tile_index):
@@ -451,10 +459,11 @@ cdef class CubeMap(AbstractMap):
         elif tile_index < 6:
             return (tile_index - 3) * self.tile_width, self.tile_height
 
-    cdef vec2 reference_position_(self, int tile_index) except *:
+    cdef vec2 reference_position_(self, int tile_index) nogil except *:
         cdef vec2 ref_pos
         IF ASSERTS:
-            assert 0 <= tile_index < 6
+            with gil:
+                assert 0 <= tile_index < 6
         if tile_index < 3:
             ref_pos.x =  tile_index * self.tile_width
             ref_pos.y = 0
@@ -463,8 +472,9 @@ cdef class CubeMap(AbstractMap):
             ref_pos.y = self.tile_height
 
         IF ASSERTS:
-            assert 0 <= ref_pos.x <= self.width * 2 / 3, ref_pos
-            assert 0 <= ref_pos.y <= self.height / 2, ref_pos
+            with gil:
+                assert 0 <= ref_pos.x <= self.width * 2 / 3, ref_pos
+                assert 0 <= ref_pos.y <= self.height / 2, ref_pos
         return ref_pos
 
 cdef class LatLonMap(AbstractMap):
@@ -552,7 +562,7 @@ cdef class TileMap(AbstractMap):
         """
         Creates TileMap from upper left and lower right corner position
         relative to the face of the cube-map.
-        Ex: (0,0) is center, (1,1) is lower right, (-1,1) is upper right
+        Ex: (0,0) is center, (1,1) is upper right, (-1,1) is lower right
         Cube face is the face of the cube on which this tile is located.
         :param p1: tuple(x, y)
         :param p2: tuple(x, y)
@@ -678,17 +688,19 @@ cdef class TileMap(AbstractMap):
 
     @cython.cdivision(True)
     @cython.wraparound(False)
-    cdef vec3 vector_from_xy_(self, vec2 pos) except *:
+    cdef vec3 vector_from_xy_(self, vec2 pos) nogil except *:
         cdef vec3 vector
         cdef double a, b, a_range, b_range
         cdef double min_rel_x, max_rel_x, min_rel_y, max_rel_y
         a_index, b_index = pos.x, pos.y
         if not 0 <= a_index <= self.width - 1:
-            raise ValueError('Passed x {} was outside range 0-{}'
-                             .format(a_index, self.width))
+            with gil:
+                raise ValueError('Passed x {} was outside range 0-{}'
+                                 .format(a_index, self.width))
         if not 0 <= b_index <= self.height - 1:
-            raise ValueError('Passed x {} was outside range 0-{}'
-                             .format(b_index, self.height))
+            with gil:
+                raise ValueError('Passed x {} was outside range 0-{}'
+                                 .format(b_index, self.height))
         min_rel_x = self.p1.x
         min_rel_y = self.p1.y
         max_rel_x = self.p2.x
@@ -720,7 +732,9 @@ cdef class TileMap(AbstractMap):
         elif self.cube_face == 5:
             vector.x, vector.y, vector.z = -a, b, -1
         else:
-            raise ValueError('Invalid face index: {}'.format(self.cube_face))
+            with gil:
+                raise ValueError(
+                    'Invalid face index: {}'.format(self.cube_face))
         return vector
 
 
@@ -1084,14 +1098,14 @@ cdef class GreyCubeMap(CubeMap):
                              .format(pos_[1], self.height))
         self.set_xy_(pos_, v)
     
-    cdef void set_xy_(self, int[2] pos, a_t v) except *:
+    cdef void set_xy_(self, int[2] pos, a_t v) nogil except *:
         (<a_t *> self._arr)[pos[1] * self.width + pos[0]] = v
     
     @cython.wraparound(False)
     @cython.initializedcheck(False)
-    cdef a_t sample(self, vec2 pos) except? -1.:
+    cdef a_t sample(self, vec2 pos) nogil except? -1.:
         """
-        Samples passed array at passed position.
+        Samples array at passed position.
     
         Passed x and y positions may be values other than an integer,
         in which case the returned value will be a weighted average of
@@ -1519,14 +1533,14 @@ cdef class GreyLatLonMap(LatLonMap):
                              .format(pos_[1], self.height))
         self.set_xy_(pos_, v)
     
-    cdef void set_xy_(self, int[2] pos, a_t v) except *:
+    cdef void set_xy_(self, int[2] pos, a_t v) nogil except *:
         (<a_t *> self._arr)[pos[1] * self.width + pos[0]] = v
     
     @cython.wraparound(False)
     @cython.initializedcheck(False)
-    cdef a_t sample(self, vec2 pos) except? -1.:
+    cdef a_t sample(self, vec2 pos) nogil except? -1.:
         """
-        Samples passed array at passed position.
+        Samples array at passed position.
     
         Passed x and y positions may be values other than an integer,
         in which case the returned value will be a weighted average of
@@ -1954,14 +1968,14 @@ cdef class GreyTileMap(TileMap):
                              .format(pos_[1], self.height))
         self.set_xy_(pos_, v)
     
-    cdef void set_xy_(self, int[2] pos, a_t v) except *:
+    cdef void set_xy_(self, int[2] pos, a_t v) nogil except *:
         (<a_t *> self._arr)[pos[1] * self.width + pos[0]] = v
     
     @cython.wraparound(False)
     @cython.initializedcheck(False)
-    cdef a_t sample(self, vec2 pos) except? -1.:
+    cdef a_t sample(self, vec2 pos) nogil except? -1.:
         """
-        Samples passed array at passed position.
+        Samples array at passed position.
     
         Passed x and y positions may be values other than an integer,
         in which case the returned value will be a weighted average of
@@ -2389,14 +2403,14 @@ cdef class GreyCubeSide(CubeSide):
                              .format(pos_[1], self.height))
         self.set_xy_(pos_, v)
     
-    cdef void set_xy_(self, int[2] pos, a_t v) except *:
+    cdef void set_xy_(self, int[2] pos, a_t v) nogil except *:
         (<a_t *> self._arr)[pos[1] * self.width + pos[0]] = v
     
     @cython.wraparound(False)
     @cython.initializedcheck(False)
-    cdef a_t sample(self, vec2 pos) except? -1.:
+    cdef a_t sample(self, vec2 pos) nogil except? -1.:
         """
-        Samples passed array at passed position.
+        Samples array at passed position.
     
         Passed x and y positions may be values other than an integer,
         in which case the returned value will be a weighted average of
@@ -2587,14 +2601,14 @@ cdef class VecCubeMap(CubeMap):
         vec_.y = vec[1]
         self.set_xy_(pos_, vec_)
     
-    cdef void set_xy_(self, int[2] pos, av vec) except *:
+    cdef void set_xy_(self, int[2] pos, av vec) nogil except *:
         (<av *> self._arr)[pos[1] * self.width + pos[0]] = vec
     
     @cython.wraparound(False)
     @cython.initializedcheck(False)
-    cdef av sample(self, vec2 pos) except *:
+    cdef av sample(self, vec2 pos) nogil except *:
         """
-        Samples passed array at passed position.
+        Samples array at passed position
     
         Passed x and y positions may be values other than an integer,
         in which case the returned value will be a weighted average of
@@ -2725,14 +2739,14 @@ cdef class VecLatLonMap(LatLonMap):
         vec_.y = vec[1]
         self.set_xy_(pos_, vec_)
     
-    cdef void set_xy_(self, int[2] pos, av vec) except *:
+    cdef void set_xy_(self, int[2] pos, av vec) nogil except *:
         (<av *> self._arr)[pos[1] * self.width + pos[0]] = vec
     
     @cython.wraparound(False)
     @cython.initializedcheck(False)
-    cdef av sample(self, vec2 pos) except *:
+    cdef av sample(self, vec2 pos) nogil except *:
         """
-        Samples passed array at passed position.
+        Samples array at passed position
     
         Passed x and y positions may be values other than an integer,
         in which case the returned value will be a weighted average of
@@ -2863,14 +2877,14 @@ cdef class VecTileMap(TileMap):
         vec_.y = vec[1]
         self.set_xy_(pos_, vec_)
     
-    cdef void set_xy_(self, int[2] pos, av vec) except *:
+    cdef void set_xy_(self, int[2] pos, av vec) nogil except *:
         (<av *> self._arr)[pos[1] * self.width + pos[0]] = vec
     
     @cython.wraparound(False)
     @cython.initializedcheck(False)
-    cdef av sample(self, vec2 pos) except *:
+    cdef av sample(self, vec2 pos) nogil except *:
         """
-        Samples passed array at passed position.
+        Samples array at passed position
     
         Passed x and y positions may be values other than an integer,
         in which case the returned value will be a weighted average of
@@ -3001,14 +3015,14 @@ cdef class VecCubeSide(CubeSide):
         vec_.y = vec[1]
         self.set_xy_(pos_, vec_)
     
-    cdef void set_xy_(self, int[2] pos, av vec) except *:
+    cdef void set_xy_(self, int[2] pos, av vec) nogil except *:
         (<av *> self._arr)[pos[1] * self.width + pos[0]] = vec
     
     @cython.wraparound(False)
     @cython.initializedcheck(False)
-    cdef av sample(self, vec2 pos) except *:
+    cdef av sample(self, vec2 pos) nogil except *:
         """
-        Samples passed array at passed position.
+        Samples array at passed position
     
         Passed x and y positions may be values other than an integer,
         in which case the returned value will be a weighted average of
@@ -3142,14 +3156,14 @@ cdef class RegCubeMap(CubeMap):
         pos_[1] = pos[1]
         self.set_xy_(pos_, r)
     
-    cdef void set_xy_(self, int[2] pos, rt r) except *:
+    cdef void set_xy_(self, int[2] pos, rt r) nogil except *:
         (<rt *> self._arr)[pos[1] * self.width + pos[0]] = r
     
     @cython.wraparound(False)
     @cython.initializedcheck(False)
-    cdef rt sample(self, vec2 pos) except *:
+    cdef rt sample(self, vec2 pos) nogil except *:
         """
-        Samples passed array at passed position.
+        Samples array at passed position.
     
         Passed x and y positions may be values other than an integer,
         in which case the returned value will be a weighted average of
@@ -3277,14 +3291,14 @@ cdef class RegLatLonMap(LatLonMap):
         pos_[1] = pos[1]
         self.set_xy_(pos_, r)
     
-    cdef void set_xy_(self, int[2] pos, rt r) except *:
+    cdef void set_xy_(self, int[2] pos, rt r) nogil except *:
         (<rt *> self._arr)[pos[1] * self.width + pos[0]] = r
     
     @cython.wraparound(False)
     @cython.initializedcheck(False)
-    cdef rt sample(self, vec2 pos) except *:
+    cdef rt sample(self, vec2 pos) nogil except *:
         """
-        Samples passed array at passed position.
+        Samples array at passed position.
     
         Passed x and y positions may be values other than an integer,
         in which case the returned value will be a weighted average of
@@ -3412,14 +3426,14 @@ cdef class RegTileMap(TileMap):
         pos_[1] = pos[1]
         self.set_xy_(pos_, r)
     
-    cdef void set_xy_(self, int[2] pos, rt r) except *:
+    cdef void set_xy_(self, int[2] pos, rt r) nogil except *:
         (<rt *> self._arr)[pos[1] * self.width + pos[0]] = r
     
     @cython.wraparound(False)
     @cython.initializedcheck(False)
-    cdef rt sample(self, vec2 pos) except *:
+    cdef rt sample(self, vec2 pos) nogil except *:
         """
-        Samples passed array at passed position.
+        Samples array at passed position.
     
         Passed x and y positions may be values other than an integer,
         in which case the returned value will be a weighted average of
@@ -3547,14 +3561,14 @@ cdef class RegCubeSide(CubeSide):
         pos_[1] = pos[1]
         self.set_xy_(pos_, r)
     
-    cdef void set_xy_(self, int[2] pos, rt r) except *:
+    cdef void set_xy_(self, int[2] pos, rt r) nogil except *:
         (<rt *> self._arr)[pos[1] * self.width + pos[0]] = r
     
     @cython.wraparound(False)
     @cython.initializedcheck(False)
-    cdef rt sample(self, vec2 pos) except *:
+    cdef rt sample(self, vec2 pos) nogil except *:
         """
-        Samples passed array at passed position.
+        Samples array at passed position.
     
         Passed x and y positions may be values other than an integer,
         in which case the returned value will be a weighted average of
@@ -3630,19 +3644,20 @@ cpdef vector_from_lat_lon(pos):
     return Vector((vector_.x, vector_.y, vector_.z))
 
 IF ASSERTS:
-    cdef vec3 vector_from_lat_lon_(latlon lat_lon) except *:
+    cdef vec3 vector_from_lat_lon_(latlon lat_lon) nogil except *:
         cdef vec3 vector
         cdef double lat = lat_lon.lat, lon = lat_lon.lon
 
-        assert MIN_LAT <= lat <= MAX_LAT + 1e-6, 'bad lat: {}'.format(lat_lon)
-        assert MIN_LON <= lon <= MAX_LON + 1e-6, 'bad lon: {}'.format(lat_lon)
+        with gil:
+            assert MIN_LAT <= lat <= MAX_LAT + 1e-6, f'bad lat: {lat_lon}'
+            assert MIN_LON <= lon <= MAX_LON + 1e-6, f'bad lon: {lat_lon}'
 
         vector.x = cos(lat) * cos(lon)
         vector.y = cos(lat) * sin(lon)
         vector.z = sin(lat)
         return vector
 ELSE:
-    cdef vec3 vector_from_lat_lon_(latlon lat_lon):
+    cdef vec3 vector_from_lat_lon_(latlon lat_lon) nogil:
         cdef vec3 vector
         cdef double lat = lat_lon.lat, lon = lat_lon.lon
 
@@ -3660,11 +3675,12 @@ cpdef lat_lon_from_vector(vector):
 
 IF ASSERTS:
     @cython.wraparound(False)
-    cdef latlon lat_lon_from_vector_(vec3 vector) except *:
-        assert not isnan(vector.x), vector
-        assert not isnan(vector.y), vector
-        assert not isnan(vector.z), vector
-        assert vector.x != 0 or vector.y != 0 or vector.z != 0, vector
+    cdef latlon lat_lon_from_vector_(vec3 vector) nogil except *:
+        with gil:
+            assert not isnan(vector.x), vector
+            assert not isnan(vector.y), vector
+            assert not isnan(vector.z), vector
+            assert vector.x != 0 or vector.y != 0 or vector.z != 0, vector
 
         cdef latlon lat_lon
         x = vector.x
@@ -3673,12 +3689,13 @@ IF ASSERTS:
         lat_lon.lat = atan2(z, sqrt(pow(x, 2) + pow(y, 2)))
         lat_lon.lon = atan2(y, x)
 
-        assert MIN_LAT <= lat_lon.lat <= MAX_LAT, lat_lon
-        assert MIN_LON <= lat_lon.lon <= MAX_LON, lat_lon
+        with gil:
+            assert MIN_LAT <= lat_lon.lat <= MAX_LAT, lat_lon
+            assert MIN_LON <= lat_lon.lon <= MAX_LON, lat_lon
         return lat_lon
 ELSE:
     @cython.wraparound(False)
-    cdef latlon lat_lon_from_vector_(vec3 vector):
+    cdef latlon lat_lon_from_vector_(vec3 vector) nogil:
         cdef latlon lat_lon
         x = vector.x
         y = vector.y
@@ -3702,7 +3719,7 @@ cpdef rt pure_region(int region_code) except *:
     return pure_region_(region_code)
 
 
-cdef rt pure_region_(int region_code) except *:
+cdef rt pure_region_(int region_code) nogil except *:
     """
     Creates new region struct using a single region code
     :param region_code: int identifier for region.
@@ -3711,8 +3728,9 @@ cdef rt pure_region_(int region_code) except *:
     cdef rt r
 
     if not 0 <= region_code < 256:
-        raise ValueError(
-            f'region code was outside valid range (0-255): {region_code}')
+        with gil:
+            raise ValueError(
+                f'region code was outside valid range (0-255): {region_code}')
 
     r.r0 = region_code
     r.w0 = 1.
@@ -3735,7 +3753,7 @@ cpdef rt mix_region(rt r0, float w0, rt r1, float w1) except *:
 
 
 @cython.cdivision(True)
-cdef rt mix_region_(rt r0, float w0, rt r1, float w1) except *:
+cdef rt mix_region_(rt r0, float w0, rt r1, float w1) nogil except *:
     """
     Combines passed region structs using passed weights
     :param r0: rt
@@ -3753,9 +3771,11 @@ cdef rt mix_region_(rt r0, float w0, rt r1, float w1) except *:
     # check that each of the two regions have no more than 2
     # region codes
     if r0.w2 or r0.w3:
-        raise ValueError(f'r0 has > 2 region codes: {r0}')
+        with gil:
+            raise ValueError(f'r0 has > 2 region codes: {r0}')
     if r1.w2 or r1.w3:
-        raise ValueError(f'r1 has > 2 region codes: {r1}')
+        with gil:
+            raise ValueError(f'r1 has > 2 region codes: {r1}')
 
     # get region codes that will be mixed
     rc0 = r0.r0
@@ -3784,7 +3804,7 @@ cdef rt mix_region_(rt r0, float w0, rt r1, float w1) except *:
     return _make_region(rc0, rc0w, rc1, rc1w, rc2, rc2w, rc3, rc3w)
 
 
-cdef float _get_region_wt(rt r, int region_code):
+cdef float _get_region_wt(rt r, int region_code) nogil:
     """
     Gets weight of region code in passed region type
     :return float
@@ -3805,7 +3825,7 @@ cdef rt _make_region(
         int r0, float w0,
         int r1, float w1,
         int r2, float w2,
-        int r3, float w3):
+        int r3, float w3) nogil:
     """
     Creates a region struct from passed data
     :return rt
@@ -3822,7 +3842,7 @@ cdef rt _make_region(
     return _sort_region(r)
 
 
-cdef rt _sort_region(rt r):
+cdef rt _sort_region(rt r) nogil:
     """
     Given a region struct, returns a region struct created from the
     passed data, but with region codes and weights sorted into
@@ -3860,7 +3880,7 @@ cpdef mix_av(v0, float w0, v1, float w1):
     return r.x, r.y
 
 @cython.cdivision(True)
-cdef av mix_av_(av v0, float w0, av v1, float w1) except *:
+cdef av mix_av_(av v0, float w0, av v1, float w1) nogil except *:
     cdef av vf
 
     # adjust weights if needed

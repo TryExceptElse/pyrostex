@@ -4,9 +4,10 @@ import numpy as np
 
 import settings
 
-from .map import GreyLatLonMap, GreyCubeMap
+from .map import GreyLatLonMap, GreyCubeMap, GreyTileMap
 from .temp import make_warming_map
 from .wind import make_wind_map
+from .height import make_height_detail
 
 TN_PATH = os.path.join(settings.ROOT_PATH, 'pyrostex')
 TN_RESOURCE_PATH = os.path.join(TN_PATH, 'resources')
@@ -62,10 +63,12 @@ class Spheroid:
         self._dir_path = dir_path
 
         # maps
-        self.height_map = None
+        self.tectonic_map = None
         self.warming_map = None
         self.temp_map = None
         self.wind_map = None
+        self.height_map = None  # final height map used for
+        self.tex_map = None
 
         # check dir exists
         if not os.path.exists(self.dir_path):
@@ -88,11 +91,15 @@ class Spheroid:
         ).strip('.')  # remove any '.'
 
     def build(self):
-        self.height_map = self.make_height_cube_map()
+        tiles_dir = os.path.join(self.dir_path, 'tiles')
+        if not os.path.exists(tiles_dir):
+            os.mkdir(tiles_dir)
+        self.tectonic_map = self.make_tectonic_map()
         self.warming_map = self.make_warming_map()
         if self.surface_pressure > 0.01:
             self.wind_map = self.make_wind_map()
         self.temp_map = self.make_temp_map()
+        self.make_detail_h_map()
         self.tex_map = self.make_tex_map()
 
     def make_dir(self):
@@ -103,7 +110,7 @@ class Spheroid:
         if not os.path.exists(self.dir_path):
             os.mkdir(self.dir_path)
 
-    def make_height_arr(self):
+    def make_tectonic_arr(self):
         """
         Converts base height map into grey-scale npy arr.
         :return: None
@@ -125,7 +132,7 @@ class Spheroid:
 
         np.save(height_map_path, arr)
 
-    def make_base_height_map(self):
+    def call_planet_subprocess(self):
         # we need to change working directory to planet_gen path
         initial_dir = os.curdir
         os.chdir(settings.PLANET_GEN_DIR)
@@ -151,13 +158,13 @@ class Spheroid:
         )
         os.chdir(initial_dir)  # change dir back to whatever it started as
 
-    def make_height_cube_map(self):
+    def make_tectonic_map(self):
         """
         Creates cube map from lat-lon map
         :return: None
         """
-        self.make_base_height_map()
-        self.make_height_arr()
+        self.call_planet_subprocess()
+        self.make_tectonic_arr()
         height_map_path = os.path.join(self.dir_path, HEIGHT_MAP_NAME)
         lat_lon_map = GreyLatLonMap(
             height=1302, width=2048, path=height_map_path)  # load from file
@@ -171,7 +178,7 @@ class Spheroid:
         :return: TMap
         """
         return make_warming_map(
-            height_map=self.height_map,
+            height_map=self.tectonic_map,
             rel_res=0.5,  # relative resolution
             mean_temp=self.mean_temp,
             base_atm=self.surface_pressure,
@@ -194,6 +201,13 @@ class Spheroid:
         :return: None
         """
 
+    def make_detail_h_map(self):
+        if self.height_map is None:
+            # self.height_map = GreyCubeMap(height=2048, width=3072)
+            # self.height_map = GreyCubeMap(height=1024, width=1536)
+            self.height_map = GreyCubeMap(height=512, width=768)
+        make_height_detail(self.height_map, self)
+
     def make_tex_map(self):
         """
         Creates map
@@ -205,9 +219,11 @@ class Spheroid:
         Writes maps to png files for debug purposes
         :return:
         """
-        self.height_map.write_png(os.path.join(
+        self.tectonic_map.write_png(os.path.join(
             self.dir_path, 'height_cube.png'))
         self.warming_map.write_png(os.path.join(self.dir_path, 'warming.png'))
+        self.height_map.write_png(
+            os.path.join(self.dir_path, 'height_detail.png'))
         # todo: temp + others
 
     @property
@@ -299,9 +315,75 @@ class Tile:
         self.p1 = p1
         self.p2 = p2
         self.rel_width = p2[0] - p1[0]  # width relative to spheroid
+        self.radius = spheroid.radius
+        self.seed = spheroid.seed  # should use same height fractals, etc
+
+        # tile maps
+        self.height_map = None
 
         self.sub_tiles = []
+
+        self.build()  # build maps
 
     def make_sub_tile(self, index):
         if not 0 <= index < 4:
             raise ValueError('Unexpected index received: {}'.format(index))
+        # todo
+
+    def build(self) -> None:
+        """
+        Creates height, color, etc map.
+        :return: None
+        """
+        if not os.path.exists(self.dir_path):
+            os.mkdir(self.dir_path)
+        self.make_height_map()
+
+    def make_height_map(self) -> None:
+        """
+        Creates height map.
+        :return:
+        """
+        # create height_map if it does not yet exist.
+        self.height_map = self.height_map or GreyTileMap(
+            width=1024, height=1024,
+            p1=self.p1, p2=self.p2, cube_face=self.face
+        )
+        make_height_detail(self.height_map, self)
+
+    def write_debug_png(self) -> None:
+        """
+        Writes maps to png files for debug purposes
+        :return:
+        """
+        self.height_map.write_png(os.path.join(
+            self.dir_path, 'height.png'))
+
+    @property
+    def dir_path(self) -> str:
+        """
+        Returns the directory to which tile should store data
+        (such as cached height, texture, etc maps) and
+        other output (such as debug images, etc).
+        :return: str
+        """
+        return os.path.join(
+            self.spheroid.dir_path, 'tiles', str(self.pos_hash))
+
+    @property
+    def pos_hash(self) -> int:
+        """
+        Produces a hash unique to the tiles position.
+        Tiles with identical positions (same face, p1 and p2) will
+        share hashes.
+        Hashes are -not- dependant on Spheroid, so all tiles with
+        face=1, p1=(-1, -1), p2=(1, 1) will have the same hash, even
+        if they are members of different spheroids.
+        Tiles therefor should be stored within
+        :return:
+        """
+        return hash((self.face, self.p1, self.p2))
+
+    @property
+    def tectonic_map(self):
+        return self.spheroid.tectonic_map

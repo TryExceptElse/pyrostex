@@ -9,7 +9,7 @@ import shutil
 
 from time import time
 
-from pyrostex.procede import Spheroid
+from pyrostex.procede import Spheroid, Tile
 from settings import ROOT_PATH
 
 
@@ -35,6 +35,16 @@ def make_sample_spheroid():
     print('writing debug graphics')
     spheroid.write_debug_png()
     print('Wrote debug graphics')
+    print('')
+    print('Creating sample sub-tile, 100x100km')
+    rw = 100e3 / 2 / spheroid.radius  # relative width
+    tile100 = Tile(spheroid, 0, None, (-rw, -rw), (rw, rw))
+    tile100.write_debug_png()
+    print('')
+    print('Creating sample sub-tile, 1x1km')
+    rw = 1e3 / 2 / spheroid.radius  # relative width
+    tile1 = Tile(spheroid, 0, None, (-rw, -rw), (rw, rw))
+    tile1.write_debug_png()
     print('Done')
 
 
