@@ -114,6 +114,57 @@ class TestCubeMap(TestCase):
         self.assertTrue(-0.01 < vec.y < 0.01)
         self.assertLess(vec.z, -0.99)
 
+    def test_values_are_blended_between_stored_values_in_array0(self):
+        m = GreyCubeMap(width=1536, height=1024)
+        m.set_xy((255, 255), 2)
+        m.set_xy((255, 256), 3)
+        self.assertAlmostEqual(2.5, m.v_from_xy((255, 255.5)), 5)
+
+    def test_values_are_blended_between_stored_values_in_array1(self):
+        m = GreyCubeMap(width=1536, height=1024)
+        m.set_xy((255, 255), 2)
+        m.set_xy((255, 256), 3)
+        self.assertAlmostEqual(2.25, m.v_from_xy((255, 255.25)), 5)
+
+    def test_values_are_blended_between_stored_values_in_array2(self):
+        m = GreyCubeMap(width=1536, height=1024)
+        m.set_xy((255, 255), 2)
+        m.set_xy((256, 255), 3)
+        self.assertAlmostEqual(2.75, m.v_from_xy((255.75, 255)), 5)
+
+    def test_xy_from_vector_returns_approximately_correct_tile0_center(self):
+        m = GreyCubeMap(width=1536, height=1024)
+        p = m.xy_from_vector(Vector((1, 0, 0)))
+        self.assertAlmostEqual(255.5, p[0], 2)
+        self.assertAlmostEqual(255.5, p[1], 2)
+
+    def test_value_can_be_stored_and_retrieved_in_tile0(self):
+        m = GreyCubeMap(width=1536, height=1024)
+        m.set_xy((254, 256), 127.8)
+        v = m.v_from_xy((254, 256))
+        self.assertAlmostEqual(127.8, v, 5)
+
+    def test_value_can_be_stored_and_retrieved_in_tile0_low_left(self):
+        m = GreyCubeMap(width=1536, height=1024)
+        m.set_xy((1, 1), 127.8)
+        v = m.v_from_xy((1, 1))
+        self.assertAlmostEqual(127.8, v, 5)
+
+    def test_value_can_be_stored_and_retrieved_in_tile0_up_right(self):
+        m = GreyCubeMap(width=1536, height=1024)
+        m.set_xy((500, 510), 127.8)
+        v = m.v_from_xy((500, 510))
+        self.assertAlmostEqual(127.8, v, 5)
+
+    def test_value_can_be_retrieved_via_vector_in_tile0_center(self):
+        m = GreyCubeMap(width=1536, height=1024)
+        m.set_xy((255, 255), 127.8)
+        m.set_xy((255, 256), 127.8)
+        m.set_xy((256, 256), 127.8)
+        m.set_xy((256, 255), 127.8)
+        v = m.v_from_vector((1, 0, 0))
+        self.assertAlmostEqual(127.8, v, 5)
+
 
 class TestLatLonMap(TestCase):
     def test_lat_lon_to_xy_returns_correct_value_at_edge(self):
