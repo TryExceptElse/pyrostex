@@ -268,7 +268,8 @@ cdef class CubeMap(AbstractMap):
         :param vector: Vector (x, y, z)
         :return: x, y
         """
-        return self.xy_from_vector_(cp2v_3d(vector))
+        v = self.xy_from_vector_(cp2v_3d(vector))
+        return v.x, v.y
 
     cdef vec2 xy_from_vector_(self, vec3 vector) except *:
         cdef latlon lat_lon = lat_lon_from_vector_(vector)
@@ -604,7 +605,7 @@ cdef class TileMap(AbstractMap):
     cdef vec2 xy_from_vector_(self, vec3 vector) except *:
         """
         Gets value associated with passed vector.
-        Unlike above version, vector is a memory view, not an object.
+        Unlike above version, vector is a struct, not an object.
         """
         cdef double x, y, z
         cdef vec2 pos
@@ -665,7 +666,10 @@ cdef class TileMap(AbstractMap):
         return self.xy_from_rel_xy_(pos)
 
     cdef vec2 xy_from_rel_xy_(self, vec2 pos) except *:
-        return mu.vec2Add(pos, self._ref_pos)
+        return mu.vec2New(
+            pos.x * (self.width - 1) + self._ref_pos.x,
+            pos.y * (self.height - 1) + self._ref_pos.y
+        )
 
     # getters of map indices from passed vector
     # these methods are intended to retrieve positions that will be
@@ -826,7 +830,7 @@ cdef class GreyCubeMap(CubeMap):
                 n_arr[y, x] = (<a_t *>self._arr)[y * self.width + x]
     
         np.save(path, n_arr, allow_pickle=False)
-        
+    
     cdef void clone(self, AbstractMap p) except *:
         if isinstance(p, GreyCubeMap):
             self.clone_(<GreyCubeMap> p)
@@ -1261,7 +1265,7 @@ cdef class GreyLatLonMap(LatLonMap):
                 n_arr[y, x] = (<a_t *>self._arr)[y * self.width + x]
     
         np.save(path, n_arr, allow_pickle=False)
-        
+    
     cdef void clone(self, AbstractMap p) except *:
         if isinstance(p, GreyCubeMap):
             self.clone_(<GreyCubeMap> p)
@@ -1696,7 +1700,7 @@ cdef class GreyTileMap(TileMap):
                 n_arr[y, x] = (<a_t *>self._arr)[y * self.width + x]
     
         np.save(path, n_arr, allow_pickle=False)
-        
+    
     cdef void clone(self, AbstractMap p) except *:
         if isinstance(p, GreyCubeMap):
             self.clone_(<GreyCubeMap> p)
@@ -2131,7 +2135,7 @@ cdef class GreyCubeSide(CubeSide):
                 n_arr[y, x] = (<a_t *>self._arr)[y * self.width + x]
     
         np.save(path, n_arr, allow_pickle=False)
-        
+    
     cdef void clone(self, AbstractMap p) except *:
         if isinstance(p, GreyCubeMap):
             self.clone_(<GreyCubeMap> p)
@@ -2589,7 +2593,7 @@ cdef class VecCubeMap(CubeMap):
         return self.v_from_vector_(cp2v_3d(vector))
     
     cdef av v_from_vector_(self, vec3 vector) except *:
-        return self.v_from_xy_(self.xy_from_vector(vector))
+        return self.v_from_xy_(self.xy_from_vector_(vector))
     
     # setters
     cpdef void set_xy(self, pos, vec) except *:
@@ -2727,7 +2731,7 @@ cdef class VecLatLonMap(LatLonMap):
         return self.v_from_vector_(cp2v_3d(vector))
     
     cdef av v_from_vector_(self, vec3 vector) except *:
-        return self.v_from_xy_(self.xy_from_vector(vector))
+        return self.v_from_xy_(self.xy_from_vector_(vector))
     
     # setters
     cpdef void set_xy(self, pos, vec) except *:
@@ -2865,7 +2869,7 @@ cdef class VecTileMap(TileMap):
         return self.v_from_vector_(cp2v_3d(vector))
     
     cdef av v_from_vector_(self, vec3 vector) except *:
-        return self.v_from_xy_(self.xy_from_vector(vector))
+        return self.v_from_xy_(self.xy_from_vector_(vector))
     
     # setters
     cpdef void set_xy(self, pos, vec) except *:
@@ -3003,7 +3007,7 @@ cdef class VecCubeSide(CubeSide):
         return self.v_from_vector_(cp2v_3d(vector))
     
     cdef av v_from_vector_(self, vec3 vector) except *:
-        return self.v_from_xy_(self.xy_from_vector(vector))
+        return self.v_from_xy_(self.xy_from_vector_(vector))
     
     # setters
     cpdef void set_xy(self, pos, vec) except *:
@@ -3147,7 +3151,7 @@ cdef class RegCubeMap(CubeMap):
         return self.v_from_vector_(cp2v_3d(vector))
     
     cdef rt v_from_vector_(self, vec3 vector) except *:
-        return self.v_from_xy_(self.xy_from_vector(vector))
+        return self.v_from_xy_(self.xy_from_vector_(vector))
     
     # setters
     cpdef void set_xy(self, pos, r) except *:
@@ -3282,7 +3286,7 @@ cdef class RegLatLonMap(LatLonMap):
         return self.v_from_vector_(cp2v_3d(vector))
     
     cdef rt v_from_vector_(self, vec3 vector) except *:
-        return self.v_from_xy_(self.xy_from_vector(vector))
+        return self.v_from_xy_(self.xy_from_vector_(vector))
     
     # setters
     cpdef void set_xy(self, pos, r) except *:
@@ -3417,7 +3421,7 @@ cdef class RegTileMap(TileMap):
         return self.v_from_vector_(cp2v_3d(vector))
     
     cdef rt v_from_vector_(self, vec3 vector) except *:
-        return self.v_from_xy_(self.xy_from_vector(vector))
+        return self.v_from_xy_(self.xy_from_vector_(vector))
     
     # setters
     cpdef void set_xy(self, pos, r) except *:
@@ -3552,7 +3556,7 @@ cdef class RegCubeSide(CubeSide):
         return self.v_from_vector_(cp2v_3d(vector))
     
     cdef rt v_from_vector_(self, vec3 vector) except *:
-        return self.v_from_xy_(self.xy_from_vector(vector))
+        return self.v_from_xy_(self.xy_from_vector_(vector))
     
     # setters
     cpdef void set_xy(self, pos, r) except *:
