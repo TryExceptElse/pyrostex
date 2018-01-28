@@ -7,7 +7,7 @@ import settings
 from .map import GreyLatLonMap, GreyCubeMap, GreyTileMap
 from .temp import make_warming_map
 from .wind import make_wind_map
-from .height import make_height_detail
+from .height import make_height_detail, make_tectonic_cube
 
 TN_PATH = os.path.join(settings.ROOT_PATH, 'pyrostex')
 TN_RESOURCE_PATH = os.path.join(TN_PATH, 'resources')
@@ -168,7 +168,9 @@ class Spheroid:
         height_map_path = os.path.join(self.dir_path, HEIGHT_MAP_NAME)
         lat_lon_map = GreyLatLonMap(
             height=1302, width=2048, path=height_map_path)  # load from file
-        cube_map = GreyCubeMap(prototype=lat_lon_map, height=1024, width=1536)
+        cube_map = GreyCubeMap(height=1024, width=1536)
+        make_tectonic_cube(cube_map, lat_lon_map, self)
+
         return cube_map
 
     def make_warming_map(self):
@@ -225,6 +227,15 @@ class Spheroid:
         self.height_map.write_png(
             os.path.join(self.dir_path, 'height_detail.png'))
         # todo: temp + others
+
+    def write_cache(self) -> None:
+        """
+        Writes data to cache so that it can be accessed again quickly
+        if spheroid needs to be re-created.
+        :return: None
+        """
+        self.tectonic_map.save(os.path.join(self.dir_path, 'height_cube.npy'))
+        self.height_map.save(os.path.join(self.dir_path, 'height_detail.npy'))
 
     @property
     def dir_path(self):
@@ -358,6 +369,14 @@ class Tile:
         """
         self.height_map.write_png(os.path.join(
             self.dir_path, 'height.png'))
+
+    def write_cache(self) -> None:
+        """
+        Writes data to cache so that it can be accessed again quickly
+        if tile needs to be re-created.
+        :return: None
+        """
+        self.height_map.save(os.path.join(self.dir_path, 'height.npy'))
 
     @property
     def dir_path(self) -> str:

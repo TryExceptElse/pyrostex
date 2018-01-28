@@ -112,7 +112,7 @@ cdef vec4 fbmd(vec3 x) nogil:
         vec3  d = vec3Zero();
         vec4  n
 
-    for i in range(15):
+    for i in range(8):
         n = noised(vec3Multiply(x, f*scale))
 
         # accumulate values, derivatives
