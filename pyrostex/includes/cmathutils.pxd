@@ -245,6 +245,19 @@ cdef inline vec4 vec4ScalarSub(const vec4 v, const ft sub) nogil:
     return vec4New(v.x - sub, v.y - sub, v.z - sub, v.w - sub)
 
 
+# vector scalar square root
+
+
+cdef inline vec2 vec2Sqrt(const vec2 v) nogil:
+    return vec2New(sqrt(v.x), sqrt(v.y))
+
+cdef inline vec3 vec3Sqrt(const vec3 v) nogil:
+    return vec3New(sqrt(v.x), sqrt(v.y), sqrt(v.z))
+
+cdef inline vec4 vec4Sqrt(const vec4 v) nogil:
+    return vec4New(sqrt(v.x), sqrt(v.y), sqrt(v.z), sqrt(v.w))
+
+
 # other
 
 
