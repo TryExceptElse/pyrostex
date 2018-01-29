@@ -109,7 +109,8 @@ setup(
                 name='pyrostex.height',
                 sources=['pyrostex/height.pyx'],
                 language='c++',
-                extra_compile_args=["-ffast-math", "-Ofast"]
+                extra_compile_args=["-ffast-math", "-Ofast", "-fopenmp"],
+                extra_link_args=['-fopenmp'],
             ),
             Extension(
                 name='pyrostex.wind',
@@ -126,7 +127,7 @@ setup(
                 language="c++",  # use of FastNoise class requires c++
                 extra_compile_args=["-ffast-math", "-Ofast"],
             ),
-        ] + test_extensions if 'test' in flags else []
+        ] + (test_extensions if 'test' in flags else [])
         ),
     ),
 )

@@ -172,20 +172,23 @@ cdef class AbstractMap:
     cpdef tuple xy_from_lat_lon(self, pos):
         raise NotImplementedError()
 
-    cdef vec2 xy_from_lat_lon_(self, latlon pos) except *:
-        raise NotImplementedError()
+    cdef vec2 xy_from_lat_lon_(self, latlon pos) nogil except *:
+        with gil:
+            raise NotImplementedError()
 
     cpdef tuple xy_from_rel_xy(self, pos):
         raise NotImplementedError()
 
-    cdef vec2 xy_from_rel_xy_(self, vec2 pos) except *:
-        raise NotImplementedError()
+    cdef vec2 xy_from_rel_xy_(self, vec2 pos) nogil except *:
+        with gil:
+            raise NotImplementedError()
 
     cpdef tuple xy_from_vector(self, vector):
         raise NotImplementedError()
 
-    cdef vec2 xy_from_vector_(self, vec3 vector) except *:
-        raise NotImplementedError()
+    cdef vec2 xy_from_vector_(self, vec3 vector) nogil except *:
+        with gil:
+            raise NotImplementedError()
 
     # Other Conversions
 
@@ -271,10 +274,84 @@ cdef class CubeMap(AbstractMap):
         v = self.xy_from_vector_(cp2v_3d(vector))
         return v.x, v.y
 
-    cdef vec2 xy_from_vector_(self, vec3 vector) except *:
-        cdef latlon lat_lon = lat_lon_from_vector_(vector)
-        cdef TileMap tile = self.tile_from_lat_lon_(lat_lon)
-        return tile.xy_from_vector_(vector)
+    cdef vec2 xy_from_vector_(self, vec3 vector) nogil except *:
+        # cdef latlon lat_lon = lat_lon_from_vector_(vector)
+        # cdef TileMap tile = self.tile_from_lat_lon_(lat_lon)
+        # return tile.xy_from_vector_(vector)
+        
+        cdef int face = self.tile_index_from_vector_(vector)
+        cdef double x, y, z
+        cdef vec2 pos
+
+        x = vector.x
+        y = vector.y
+        z = vector.z
+        if x == 0. and y == 0. and z == 0.:
+            with gil:
+                raise ValueError('Passed vector was (0, 0, 0)')
+        if face == 0:
+            a = y / x
+            b = z / x
+        elif face == 1:
+            a = x / -y
+            b = z / -y
+        elif face == 2:
+            a = y / x
+            b = z / -x
+        elif face == 3:
+            a = x / -y
+            b = z / y
+        elif face == 4:
+            a = x / z
+            b = y / z
+        elif face == 5:
+            a = x / z
+            b = y / -z
+        else:
+            with gil:
+                raise IndexError(face)
+        # correct minor floating point errors (~1e-12 or smaller)
+        if a < -1:
+            IF ASSERTS:
+                with gil:
+                    assert a + 1 > -1e-12, a
+            a = -1
+        if a > 1:
+            IF ASSERTS:
+                with gil:
+                    assert a - 1 < 1e-12, a
+            a = 1
+        if b < -1:
+            IF ASSERTS:
+                with gil:
+                    assert b + 1 > -1e-12, b
+            b = -1
+        if b > 1:
+            IF ASSERTS:
+                with gil:
+                    assert b - 1 < 1e-12, b
+            b = 1
+        IF ASSERTS:
+            with gil:
+                assert -1 <= a <= 1 and -1 <= b <= 1, \
+                    'position outside expected range: ({},{}), tile: {}' \
+                    .format(a, b, face)
+        # convert a and b from (-1,-1) range to (0,1)
+        pos.x = (a / 2 + 0.5) * (self.tile_width - 1)
+        pos.y = (b / 2 + 0.5) * (self.tile_height - 1)
+        IF ASSERTS:
+            with gil:
+                assert 0 <= pos.x <= self.tile_width - 1, \
+                    'a value: {}, tile: {}'.format(pos.x, face)
+                assert 0 <= pos.y <= self.tile_height - 1, \
+                    'b value: {}, tile: {}'.format(pos.y, face)
+        # add tile reference position to pos
+        if face < 3:
+            pos.x += face * self.tile_width
+        else:
+            pos.x += (face - 3) * self.tile_width
+            pos.y += self.tile_height
+        return pos
 
     cpdef CubeSide get_tile(self, int index):
         """
@@ -296,7 +373,7 @@ cdef class CubeMap(AbstractMap):
     cdef CubeSide tile_from_vector_(self, vec3 vector):
         return self.get_tile(self.tile_index_from_vector_(vector))
 
-    cdef int tile_index_from_vector_(self, vec3 vector):
+    cdef int tile_index_from_vector_(self, vec3 vector) nogil:
         # prevent repeated calls to fabs and vector
         cdef double x, y, z, abs_x, abs_y, abs_z
         x = vector.x
@@ -499,7 +576,7 @@ cdef class LatLonMap(AbstractMap):
         """
         return self.xy_from_vector_(cp2v_3d(vector))
 
-    cdef vec2 xy_from_vector_(self, vec3 vector) except *:
+    cdef vec2 xy_from_vector_(self, vec3 vector) nogil except *:
         return self.xy_from_lat_lon_(lat_lon_from_vector_(vector))
 
     @cython.wraparound(False)
@@ -511,7 +588,7 @@ cdef class LatLonMap(AbstractMap):
 
     @cython.cdivision(True)
     @cython.wraparound(False)
-    cdef vec2 xy_from_lat_lon_(self, latlon lat_lon) except *:
+    cdef vec2 xy_from_lat_lon_(self, latlon lat_lon) nogil except *:
         cdef vec2 xy_pos
         cdef double x, y
         lat = lat_lon.lat
@@ -602,7 +679,7 @@ cdef class TileMap(AbstractMap):
 
     @cython.cdivision(True)
     @cython.wraparound(False)
-    cdef vec2 xy_from_vector_(self, vec3 vector) except *:
+    cdef vec2 xy_from_vector_(self, vec3 vector) nogil except *:
         """
         Gets value associated with passed vector.
         Unlike above version, vector is a struct, not an object.
@@ -613,7 +690,8 @@ cdef class TileMap(AbstractMap):
         y = vector.y
         z = vector.z
         if x == 0. and y == 0. and z == 0.:
-            raise ValueError('Passed vector was (0, 0, 0)')
+            with gil:
+                raise ValueError('Passed vector was (0, 0, 0)')
         if self.cube_face == 0:
             a = y / x
             b = z / x
@@ -633,7 +711,8 @@ cdef class TileMap(AbstractMap):
             a = x / z
             b = y / -z
         else:
-            raise IndexError(self.cube_face)
+            with gil:
+                raise IndexError(self.cube_face)
         # correct minor floating point errors (~1e-12 or smaller)
         if a < -1:
             IF ASSERTS:
@@ -665,7 +744,7 @@ cdef class TileMap(AbstractMap):
                 'b value: {}, tile: {}'.format(pos.y, self.cube_face)
         return self.xy_from_rel_xy_(pos)
 
-    cdef vec2 xy_from_rel_xy_(self, vec2 pos) except *:
+    cdef vec2 xy_from_rel_xy_(self, vec2 pos) nogil except *:
         return mu.vec2New(
             pos.x * (self.width - 1) + self._ref_pos.x,
             pos.y * (self.height - 1) + self._ref_pos.y
@@ -890,7 +969,7 @@ cdef class GreyCubeMap(CubeMap):
                              .format(pos_.y, self.height))
         return self.v_from_xy_(pos_)
     
-    cdef a_t v_from_xy_(self, vec2 pos) except? -1.:
+    cdef a_t v_from_xy_(self, vec2 pos) nogil except? -1.:
         """
         Gets pixel value at passed position on this map.
         Given a position between indices, will return a weighted
@@ -899,9 +978,11 @@ cdef class GreyCubeMap(CubeMap):
         :return: int
         """
         if not 0 <= pos.x <= self.width - 1:
-            raise ValueError('x ({}) outside valid range'.format(pos.x))
+            with gil:
+                raise ValueError('x ({}) outside valid range'.format(pos.x))
         if not 0 <= pos.y <= self.height - 1:
-            raise ValueError('y ({}) outside valid range'.format(pos.x))
+            with gil:
+                raise ValueError('y ({}) outside valid range'.format(pos.x))
         return self.sample(pos)
     
     cpdef a_t v_from_rel_xy(self, tuple pos) except? -1.:
@@ -954,7 +1035,7 @@ cdef class GreyCubeMap(CubeMap):
         """
         return self.v_from_vector_(cp2v_3d(vector))
     
-    cdef a_t v_from_vector_(self, vec3 vector) except? -1.:
+    cdef a_t v_from_vector_(self, vec3 vector) nogil except? -1.:
         """
         Gets pixel value identified by vector.
         :param vector: vec3
@@ -1325,7 +1406,7 @@ cdef class GreyLatLonMap(LatLonMap):
                              .format(pos_.y, self.height))
         return self.v_from_xy_(pos_)
     
-    cdef a_t v_from_xy_(self, vec2 pos) except? -1.:
+    cdef a_t v_from_xy_(self, vec2 pos) nogil except? -1.:
         """
         Gets pixel value at passed position on this map.
         Given a position between indices, will return a weighted
@@ -1334,9 +1415,11 @@ cdef class GreyLatLonMap(LatLonMap):
         :return: int
         """
         if not 0 <= pos.x <= self.width - 1:
-            raise ValueError('x ({}) outside valid range'.format(pos.x))
+            with gil:
+                raise ValueError('x ({}) outside valid range'.format(pos.x))
         if not 0 <= pos.y <= self.height - 1:
-            raise ValueError('y ({}) outside valid range'.format(pos.x))
+            with gil:
+                raise ValueError('y ({}) outside valid range'.format(pos.x))
         return self.sample(pos)
     
     cpdef a_t v_from_rel_xy(self, tuple pos) except? -1.:
@@ -1389,7 +1472,7 @@ cdef class GreyLatLonMap(LatLonMap):
         """
         return self.v_from_vector_(cp2v_3d(vector))
     
-    cdef a_t v_from_vector_(self, vec3 vector) except? -1.:
+    cdef a_t v_from_vector_(self, vec3 vector) nogil except? -1.:
         """
         Gets pixel value identified by vector.
         :param vector: vec3
@@ -1760,7 +1843,7 @@ cdef class GreyTileMap(TileMap):
                              .format(pos_.y, self.height))
         return self.v_from_xy_(pos_)
     
-    cdef a_t v_from_xy_(self, vec2 pos) except? -1.:
+    cdef a_t v_from_xy_(self, vec2 pos) nogil except? -1.:
         """
         Gets pixel value at passed position on this map.
         Given a position between indices, will return a weighted
@@ -1769,9 +1852,11 @@ cdef class GreyTileMap(TileMap):
         :return: int
         """
         if not 0 <= pos.x <= self.width - 1:
-            raise ValueError('x ({}) outside valid range'.format(pos.x))
+            with gil:
+                raise ValueError('x ({}) outside valid range'.format(pos.x))
         if not 0 <= pos.y <= self.height - 1:
-            raise ValueError('y ({}) outside valid range'.format(pos.x))
+            with gil:
+                raise ValueError('y ({}) outside valid range'.format(pos.x))
         return self.sample(pos)
     
     cpdef a_t v_from_rel_xy(self, tuple pos) except? -1.:
@@ -1824,7 +1909,7 @@ cdef class GreyTileMap(TileMap):
         """
         return self.v_from_vector_(cp2v_3d(vector))
     
-    cdef a_t v_from_vector_(self, vec3 vector) except? -1.:
+    cdef a_t v_from_vector_(self, vec3 vector) nogil except? -1.:
         """
         Gets pixel value identified by vector.
         :param vector: vec3
@@ -2195,7 +2280,7 @@ cdef class GreyCubeSide(CubeSide):
                              .format(pos_.y, self.height))
         return self.v_from_xy_(pos_)
     
-    cdef a_t v_from_xy_(self, vec2 pos) except? -1.:
+    cdef a_t v_from_xy_(self, vec2 pos) nogil except? -1.:
         """
         Gets pixel value at passed position on this map.
         Given a position between indices, will return a weighted
@@ -2204,9 +2289,11 @@ cdef class GreyCubeSide(CubeSide):
         :return: int
         """
         if not 0 <= pos.x <= self.width - 1:
-            raise ValueError('x ({}) outside valid range'.format(pos.x))
+            with gil:
+                raise ValueError('x ({}) outside valid range'.format(pos.x))
         if not 0 <= pos.y <= self.height - 1:
-            raise ValueError('y ({}) outside valid range'.format(pos.x))
+            with gil:
+                raise ValueError('y ({}) outside valid range'.format(pos.x))
         return self.sample(pos)
     
     cpdef a_t v_from_rel_xy(self, tuple pos) except? -1.:
@@ -2259,7 +2346,7 @@ cdef class GreyCubeSide(CubeSide):
         """
         return self.v_from_vector_(cp2v_3d(vector))
     
-    cdef a_t v_from_vector_(self, vec3 vector) except? -1.:
+    cdef a_t v_from_vector_(self, vec3 vector) nogil except? -1.:
         """
         Gets pixel value identified by vector.
         :param vector: vec3
@@ -2577,7 +2664,7 @@ cdef class VecCubeMap(CubeMap):
     cpdef av v_from_xy(self, pos) except *:
         return self.v_from_xy_(cp2v_2d(pos))
     
-    cdef av v_from_xy_(self, vec2 pos) except *:
+    cdef av v_from_xy_(self, vec2 pos) nogil except *:
         return self.sample(pos)
     
     cpdef av v_from_rel_xy(self, tuple pos) except *:
@@ -2592,7 +2679,7 @@ cdef class VecCubeMap(CubeMap):
     cpdef av v_from_vector(self, vector) except *:
         return self.v_from_vector_(cp2v_3d(vector))
     
-    cdef av v_from_vector_(self, vec3 vector) except *:
+    cdef av v_from_vector_(self, vec3 vector) nogil except *:
         return self.v_from_xy_(self.xy_from_vector_(vector))
     
     # setters
@@ -2715,7 +2802,7 @@ cdef class VecLatLonMap(LatLonMap):
     cpdef av v_from_xy(self, pos) except *:
         return self.v_from_xy_(cp2v_2d(pos))
     
-    cdef av v_from_xy_(self, vec2 pos) except *:
+    cdef av v_from_xy_(self, vec2 pos) nogil except *:
         return self.sample(pos)
     
     cpdef av v_from_rel_xy(self, tuple pos) except *:
@@ -2730,7 +2817,7 @@ cdef class VecLatLonMap(LatLonMap):
     cpdef av v_from_vector(self, vector) except *:
         return self.v_from_vector_(cp2v_3d(vector))
     
-    cdef av v_from_vector_(self, vec3 vector) except *:
+    cdef av v_from_vector_(self, vec3 vector) nogil except *:
         return self.v_from_xy_(self.xy_from_vector_(vector))
     
     # setters
@@ -2853,7 +2940,7 @@ cdef class VecTileMap(TileMap):
     cpdef av v_from_xy(self, pos) except *:
         return self.v_from_xy_(cp2v_2d(pos))
     
-    cdef av v_from_xy_(self, vec2 pos) except *:
+    cdef av v_from_xy_(self, vec2 pos) nogil except *:
         return self.sample(pos)
     
     cpdef av v_from_rel_xy(self, tuple pos) except *:
@@ -2868,7 +2955,7 @@ cdef class VecTileMap(TileMap):
     cpdef av v_from_vector(self, vector) except *:
         return self.v_from_vector_(cp2v_3d(vector))
     
-    cdef av v_from_vector_(self, vec3 vector) except *:
+    cdef av v_from_vector_(self, vec3 vector) nogil except *:
         return self.v_from_xy_(self.xy_from_vector_(vector))
     
     # setters
@@ -2991,7 +3078,7 @@ cdef class VecCubeSide(CubeSide):
     cpdef av v_from_xy(self, pos) except *:
         return self.v_from_xy_(cp2v_2d(pos))
     
-    cdef av v_from_xy_(self, vec2 pos) except *:
+    cdef av v_from_xy_(self, vec2 pos) nogil except *:
         return self.sample(pos)
     
     cpdef av v_from_rel_xy(self, tuple pos) except *:
@@ -3006,7 +3093,7 @@ cdef class VecCubeSide(CubeSide):
     cpdef av v_from_vector(self, vector) except *:
         return self.v_from_vector_(cp2v_3d(vector))
     
-    cdef av v_from_vector_(self, vec3 vector) except *:
+    cdef av v_from_vector_(self, vec3 vector) nogil except *:
         return self.v_from_xy_(self.xy_from_vector_(vector))
     
     # setters
@@ -3135,7 +3222,7 @@ cdef class RegCubeMap(CubeMap):
     cpdef rt v_from_xy(self, pos) except *:
         return self.v_from_xy_(cp2v_2d(pos))
     
-    cdef rt v_from_xy_(self, vec2 pos) except *:
+    cdef rt v_from_xy_(self, vec2 pos) nogil except *:
         return self.sample(pos)
     
     cpdef rt v_from_rel_xy(self, tuple pos) except *:
@@ -3150,7 +3237,7 @@ cdef class RegCubeMap(CubeMap):
     cpdef rt v_from_vector(self, vector) except *:
         return self.v_from_vector_(cp2v_3d(vector))
     
-    cdef rt v_from_vector_(self, vec3 vector) except *:
+    cdef rt v_from_vector_(self, vec3 vector) nogil except *:
         return self.v_from_xy_(self.xy_from_vector_(vector))
     
     # setters
@@ -3270,7 +3357,7 @@ cdef class RegLatLonMap(LatLonMap):
     cpdef rt v_from_xy(self, pos) except *:
         return self.v_from_xy_(cp2v_2d(pos))
     
-    cdef rt v_from_xy_(self, vec2 pos) except *:
+    cdef rt v_from_xy_(self, vec2 pos) nogil except *:
         return self.sample(pos)
     
     cpdef rt v_from_rel_xy(self, tuple pos) except *:
@@ -3285,7 +3372,7 @@ cdef class RegLatLonMap(LatLonMap):
     cpdef rt v_from_vector(self, vector) except *:
         return self.v_from_vector_(cp2v_3d(vector))
     
-    cdef rt v_from_vector_(self, vec3 vector) except *:
+    cdef rt v_from_vector_(self, vec3 vector) nogil except *:
         return self.v_from_xy_(self.xy_from_vector_(vector))
     
     # setters
@@ -3405,7 +3492,7 @@ cdef class RegTileMap(TileMap):
     cpdef rt v_from_xy(self, pos) except *:
         return self.v_from_xy_(cp2v_2d(pos))
     
-    cdef rt v_from_xy_(self, vec2 pos) except *:
+    cdef rt v_from_xy_(self, vec2 pos) nogil except *:
         return self.sample(pos)
     
     cpdef rt v_from_rel_xy(self, tuple pos) except *:
@@ -3420,7 +3507,7 @@ cdef class RegTileMap(TileMap):
     cpdef rt v_from_vector(self, vector) except *:
         return self.v_from_vector_(cp2v_3d(vector))
     
-    cdef rt v_from_vector_(self, vec3 vector) except *:
+    cdef rt v_from_vector_(self, vec3 vector) nogil except *:
         return self.v_from_xy_(self.xy_from_vector_(vector))
     
     # setters
@@ -3540,7 +3627,7 @@ cdef class RegCubeSide(CubeSide):
     cpdef rt v_from_xy(self, pos) except *:
         return self.v_from_xy_(cp2v_2d(pos))
     
-    cdef rt v_from_xy_(self, vec2 pos) except *:
+    cdef rt v_from_xy_(self, vec2 pos) nogil except *:
         return self.sample(pos)
     
     cpdef rt v_from_rel_xy(self, tuple pos) except *:
@@ -3555,7 +3642,7 @@ cdef class RegCubeSide(CubeSide):
     cpdef rt v_from_vector(self, vector) except *:
         return self.v_from_vector_(cp2v_3d(vector))
     
-    cdef rt v_from_vector_(self, vec3 vector) except *:
+    cdef rt v_from_vector_(self, vec3 vector) nogil except *:
         return self.v_from_xy_(self.xy_from_vector_(vector))
     
     # setters

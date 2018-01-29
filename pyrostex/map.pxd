@@ -88,11 +88,11 @@ cdef class AbstractMap:
 
     # position conversion methods
     cpdef tuple xy_from_lat_lon(self, pos)
-    cdef vec2 xy_from_lat_lon_(self, latlon pos) except *
+    cdef vec2 xy_from_lat_lon_(self, latlon pos) nogil except *
     cpdef tuple xy_from_rel_xy(self, pos)
-    cdef vec2 xy_from_rel_xy_(self, vec2 pos) except *
+    cdef vec2 xy_from_rel_xy_(self, vec2 pos) nogil except *
     cpdef tuple xy_from_vector(self, vector)
-    cdef vec2 xy_from_vector_(self, vec3 vector) except *
+    cdef vec2 xy_from_vector_(self, vec3 vector) nogil except *
 
     # other conversion methods
     cpdef object vector_from_xy(self, pos)
@@ -121,7 +121,7 @@ cdef class CubeMap(AbstractMap):
     cdef CubeSide tile_from_xy_(self, vec2 pos)
     cpdef CubeSide tile_from_vector(self, vector)
     cdef CubeSide tile_from_vector_(self, vec3 vector)
-    cdef int tile_index_from_vector_(self, vec3 vector)
+    cdef int tile_index_from_vector_(self, vec3 vector) nogil
     cpdef short tile_index_from_xy(self, pos)
     cdef short tile_index_from_xy_(self, vec2 pos) nogil
     cdef vec3 vector_from_tile_xy_(self, int tile_index, vec2 pos) nogil except *
@@ -168,12 +168,12 @@ cdef class GreyCubeMap(CubeMap):
     cpdef a_t v_from_lat_lon(self, pos) except? -1.
     cdef a_t v_from_lat_lon_(self, latlon pos) except? -1.
     cpdef a_t v_from_xy(self, pos) except? -1.
-    cdef a_t v_from_xy_(self, vec2 pos) except? -1.
+    cdef a_t v_from_xy_(self, vec2 pos) nogil except? -1.
     cpdef a_t v_from_rel_xy(self, tuple pos) except? -1.
     cdef a_t v_from_rel_xy_(self, vec2 pos) except? -1.
     cdef a_t v_from_xy_indices_(self, int[2] pos) except? -1.
     cpdef a_t v_from_vector(self, vector) except? -1.
-    cdef a_t v_from_vector_(self, vec3 vector) except? -1.
+    cdef a_t v_from_vector_(self, vec3 vector) nogil except? -1.
     
     # value setters
     cpdef void set_xy(self, pos, v) except *
@@ -210,12 +210,12 @@ cdef class GreyLatLonMap(LatLonMap):
     cpdef a_t v_from_lat_lon(self, pos) except? -1.
     cdef a_t v_from_lat_lon_(self, latlon pos) except? -1.
     cpdef a_t v_from_xy(self, pos) except? -1.
-    cdef a_t v_from_xy_(self, vec2 pos) except? -1.
+    cdef a_t v_from_xy_(self, vec2 pos) nogil except? -1.
     cpdef a_t v_from_rel_xy(self, tuple pos) except? -1.
     cdef a_t v_from_rel_xy_(self, vec2 pos) except? -1.
     cdef a_t v_from_xy_indices_(self, int[2] pos) except? -1.
     cpdef a_t v_from_vector(self, vector) except? -1.
-    cdef a_t v_from_vector_(self, vec3 vector) except? -1.
+    cdef a_t v_from_vector_(self, vec3 vector) nogil except? -1.
     
     # value setters
     cpdef void set_xy(self, pos, v) except *
@@ -252,12 +252,12 @@ cdef class GreyTileMap(TileMap):
     cpdef a_t v_from_lat_lon(self, pos) except? -1.
     cdef a_t v_from_lat_lon_(self, latlon pos) except? -1.
     cpdef a_t v_from_xy(self, pos) except? -1.
-    cdef a_t v_from_xy_(self, vec2 pos) except? -1.
+    cdef a_t v_from_xy_(self, vec2 pos) nogil except? -1.
     cpdef a_t v_from_rel_xy(self, tuple pos) except? -1.
     cdef a_t v_from_rel_xy_(self, vec2 pos) except? -1.
     cdef a_t v_from_xy_indices_(self, int[2] pos) except? -1.
     cpdef a_t v_from_vector(self, vector) except? -1.
-    cdef a_t v_from_vector_(self, vec3 vector) except? -1.
+    cdef a_t v_from_vector_(self, vec3 vector) nogil except? -1.
     
     # value setters
     cpdef void set_xy(self, pos, v) except *
@@ -294,12 +294,12 @@ cdef class GreyCubeSide(CubeSide):
     cpdef a_t v_from_lat_lon(self, pos) except? -1.
     cdef a_t v_from_lat_lon_(self, latlon pos) except? -1.
     cpdef a_t v_from_xy(self, pos) except? -1.
-    cdef a_t v_from_xy_(self, vec2 pos) except? -1.
+    cdef a_t v_from_xy_(self, vec2 pos) nogil except? -1.
     cpdef a_t v_from_rel_xy(self, tuple pos) except? -1.
     cdef a_t v_from_rel_xy_(self, vec2 pos) except? -1.
     cdef a_t v_from_xy_indices_(self, int[2] pos) except? -1.
     cpdef a_t v_from_vector(self, vector) except? -1.
-    cdef a_t v_from_vector_(self, vec3 vector) except? -1.
+    cdef a_t v_from_vector_(self, vec3 vector) nogil except? -1.
     
     # value setters
     cpdef void set_xy(self, pos, v) except *
@@ -342,12 +342,12 @@ cdef class VecCubeMap(CubeMap):
     cpdef av v_from_lat_lon(self, pos) except *
     cdef av v_from_lat_lon_(self, latlon pos) except *
     cpdef av v_from_xy(self, pos) except *
-    cdef av v_from_xy_(self, vec2 pos) except *
+    cdef av v_from_xy_(self, vec2 pos) nogil except *
     cpdef av v_from_rel_xy(self, tuple pos) except *
     cdef av v_from_rel_xy_(self, vec2 pos) except *
     cdef av v_from_xy_indices_(self, int[2] pos) except *
     cpdef av v_from_vector(self, vector) except *
-    cdef av v_from_vector_(self, vec3 vector) except *
+    cdef av v_from_vector_(self, vec3 vector) nogil except *
     
     # setters
     cpdef void set_xy(self, pos, vec) except *
@@ -366,12 +366,12 @@ cdef class VecLatLonMap(LatLonMap):
     cpdef av v_from_lat_lon(self, pos) except *
     cdef av v_from_lat_lon_(self, latlon pos) except *
     cpdef av v_from_xy(self, pos) except *
-    cdef av v_from_xy_(self, vec2 pos) except *
+    cdef av v_from_xy_(self, vec2 pos) nogil except *
     cpdef av v_from_rel_xy(self, tuple pos) except *
     cdef av v_from_rel_xy_(self, vec2 pos) except *
     cdef av v_from_xy_indices_(self, int[2] pos) except *
     cpdef av v_from_vector(self, vector) except *
-    cdef av v_from_vector_(self, vec3 vector) except *
+    cdef av v_from_vector_(self, vec3 vector) nogil except *
     
     # setters
     cpdef void set_xy(self, pos, vec) except *
@@ -390,12 +390,12 @@ cdef class VecTileMap(TileMap):
     cpdef av v_from_lat_lon(self, pos) except *
     cdef av v_from_lat_lon_(self, latlon pos) except *
     cpdef av v_from_xy(self, pos) except *
-    cdef av v_from_xy_(self, vec2 pos) except *
+    cdef av v_from_xy_(self, vec2 pos) nogil except *
     cpdef av v_from_rel_xy(self, tuple pos) except *
     cdef av v_from_rel_xy_(self, vec2 pos) except *
     cdef av v_from_xy_indices_(self, int[2] pos) except *
     cpdef av v_from_vector(self, vector) except *
-    cdef av v_from_vector_(self, vec3 vector) except *
+    cdef av v_from_vector_(self, vec3 vector) nogil except *
     
     # setters
     cpdef void set_xy(self, pos, vec) except *
@@ -414,12 +414,12 @@ cdef class VecCubeSide(CubeSide):
     cpdef av v_from_lat_lon(self, pos) except *
     cdef av v_from_lat_lon_(self, latlon pos) except *
     cpdef av v_from_xy(self, pos) except *
-    cdef av v_from_xy_(self, vec2 pos) except *
+    cdef av v_from_xy_(self, vec2 pos) nogil except *
     cpdef av v_from_rel_xy(self, tuple pos) except *
     cdef av v_from_rel_xy_(self, vec2 pos) except *
     cdef av v_from_xy_indices_(self, int[2] pos) except *
     cpdef av v_from_vector(self, vector) except *
-    cdef av v_from_vector_(self, vec3 vector) except *
+    cdef av v_from_vector_(self, vec3 vector) nogil except *
     
     # setters
     cpdef void set_xy(self, pos, vec) except *
@@ -444,12 +444,12 @@ cdef class RegCubeMap(CubeMap):
     cpdef rt v_from_lat_lon(self, pos) except *
     cdef rt v_from_lat_lon_(self, latlon pos) except *
     cpdef rt v_from_xy(self, pos) except *
-    cdef rt v_from_xy_(self, vec2 pos) except *
+    cdef rt v_from_xy_(self, vec2 pos) nogil except *
     cpdef rt v_from_rel_xy(self, tuple pos) except *
     cdef rt v_from_rel_xy_(self, vec2 pos) except *
     cdef rt v_from_xy_indices_(self, int[2] pos) except *
     cpdef rt v_from_vector(self, vector) except *
-    cdef rt v_from_vector_(self, vec3 vector) except *
+    cdef rt v_from_vector_(self, vec3 vector) nogil except *
     
     # setters
     cpdef void set_xy(self, pos, r) except *
@@ -468,12 +468,12 @@ cdef class RegLatLonMap(LatLonMap):
     cpdef rt v_from_lat_lon(self, pos) except *
     cdef rt v_from_lat_lon_(self, latlon pos) except *
     cpdef rt v_from_xy(self, pos) except *
-    cdef rt v_from_xy_(self, vec2 pos) except *
+    cdef rt v_from_xy_(self, vec2 pos) nogil except *
     cpdef rt v_from_rel_xy(self, tuple pos) except *
     cdef rt v_from_rel_xy_(self, vec2 pos) except *
     cdef rt v_from_xy_indices_(self, int[2] pos) except *
     cpdef rt v_from_vector(self, vector) except *
-    cdef rt v_from_vector_(self, vec3 vector) except *
+    cdef rt v_from_vector_(self, vec3 vector) nogil except *
     
     # setters
     cpdef void set_xy(self, pos, r) except *
@@ -492,12 +492,12 @@ cdef class RegTileMap(TileMap):
     cpdef rt v_from_lat_lon(self, pos) except *
     cdef rt v_from_lat_lon_(self, latlon pos) except *
     cpdef rt v_from_xy(self, pos) except *
-    cdef rt v_from_xy_(self, vec2 pos) except *
+    cdef rt v_from_xy_(self, vec2 pos) nogil except *
     cpdef rt v_from_rel_xy(self, tuple pos) except *
     cdef rt v_from_rel_xy_(self, vec2 pos) except *
     cdef rt v_from_xy_indices_(self, int[2] pos) except *
     cpdef rt v_from_vector(self, vector) except *
-    cdef rt v_from_vector_(self, vec3 vector) except *
+    cdef rt v_from_vector_(self, vec3 vector) nogil except *
     
     # setters
     cpdef void set_xy(self, pos, r) except *
@@ -516,12 +516,12 @@ cdef class RegCubeSide(CubeSide):
     cpdef rt v_from_lat_lon(self, pos) except *
     cdef rt v_from_lat_lon_(self, latlon pos) except *
     cpdef rt v_from_xy(self, pos) except *
-    cdef rt v_from_xy_(self, vec2 pos) except *
+    cdef rt v_from_xy_(self, vec2 pos) nogil except *
     cpdef rt v_from_rel_xy(self, tuple pos) except *
     cdef rt v_from_rel_xy_(self, vec2 pos) except *
     cdef rt v_from_xy_indices_(self, int[2] pos) except *
     cpdef rt v_from_vector(self, vector) except *
-    cdef rt v_from_vector_(self, vec3 vector) except *
+    cdef rt v_from_vector_(self, vec3 vector) nogil except *
     
     # setters
     cpdef void set_xy(self, pos, r) except *

@@ -1,4 +1,4 @@
-# cython: infer_types=True, nonecheck=False, boundscheck=False, language_level=3,
+# cython: infer_types=True, nonecheck=False, boundscheck=False, language_level=3, initializedcheck=False
 
 """
 Cython header declaring functions from ccVector and other vector and
@@ -332,6 +332,6 @@ cdef inline void rotation_difference(mat3x3 r, const vec3 a, const vec3 b) nogil
         m,
         (1. - c) / (pow(v.x, 2) + pow(v.y, 2) + pow(v.z, 2))  # s^2
     )
-    mat3x3Add(r, r, m)
+    mat3x3Add(r, r, m)  # r = r + m
 
     # result stored in passed mat3x3 mat. No return value

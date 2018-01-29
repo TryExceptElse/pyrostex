@@ -100,6 +100,47 @@ cdef vec4 noised(vec3 x) nogil:
         temp.z
     )
 
+
+cdef float noise(vec3 x) nogil:
+    cdef:
+        vec3 p = vec3Floor(x)
+        vec3 w = vec3Fract(x)
+
+        vec3 u = vec3New(
+            w.x * w.x * (3.0-2.0*w.x),
+            w.y * w.y * (3.0-2.0*w.y),
+            w.z * w.z * (3.0-2.0*w.z),
+        )
+
+        vec3 du = vec3New(
+            6.0*w.x*(1.0-w.x),
+            6.0*w.y*(1.0-w.y),
+            6.0*w.z*(1.0-w.z)
+        )
+
+        float n = p.x + p.y*157.0 + 113.0*p.z;
+
+        float a = hash(n+  0.0);
+        float b = hash(n+  1.0);
+        float c = hash(n+157.0);
+        float d = hash(n+158.0);
+        float e = hash(n+113.0);
+        float f = hash(n+114.0);
+        float g = hash(n+270.0);
+        float h = hash(n+271.0);
+
+        float k0 =   a;
+        float k1 =   b - a;
+        float k2 =   c - a;
+        float k3 =   e - a;
+        float k4 =   a - b - c + d;
+        float k5 =   a - c - e + g;
+        float k6 =   a - b - e + f;
+        float k7 = - a + b + c - d + e - f - g + h;
+
+    return k0 + k1*u.x + k2*u.y + k3*u.z + k4*u.x*u.y + k5*u.y*u.z + \
+        k6*u.z*u.x + k7*u.x*u.y*u.z
+
 #---------------------------------------------------------------
 
 cdef vec4 fbmd(vec3 x) nogil:
@@ -112,7 +153,7 @@ cdef vec4 fbmd(vec3 x) nogil:
         vec3  d = vec3Zero();
         vec4  n
 
-    for i in range(8):
+    for i in range(15):
         n = noised(vec3Multiply(x, f*scale))
 
         # accumulate values, derivatives
@@ -123,3 +164,21 @@ cdef vec4 fbmd(vec3 x) nogil:
         f *= 1.8;             # frequency increase
 
     return vec4New(a, d.x, d.y, d.z)
+
+
+cdef float fbm(vec3 x) nogil:
+    cdef:
+        float scale  = 1.5;
+
+        float a = 0.0;
+        float b = 0.5;
+        float f = 1.0;
+
+    for i in range(8):
+        # accumulate values
+        a += b*noise(vec3Multiply(x, f*scale))
+
+        b *= 0.5;             # amplitude decrease
+        f *= 1.8;             # frequency increase
+
+    return a
