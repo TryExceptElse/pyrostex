@@ -20,3 +20,5 @@ class TestSpheroid(TestCase):
             dir_path=spheroid_dir
         )
         spheroid.write_debug_png()
+
+    # todo: test elevation data max, min, abs-mean

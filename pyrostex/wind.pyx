@@ -6,14 +6,10 @@ Handles generation of wind current map
 
 include "flags.pxi"  # debug, assert, etc flags
 
-import numpy as np
-cimport numpy as np
 cimport cython
 
-from .map cimport CubeMap
-from .v_map cimport VectorMap
-from .temp cimport TMap
 from .noise.noise cimport PyFastNoise
+from .includes.cmathutils cimport vec3Normalize
 
 from libc.math cimport sqrt
 
@@ -44,33 +40,9 @@ DEF GAIN = 0.5
 #     sum
 #     add to map
 
-DEF WIND_TO_INT_CONVERSION = 8  # lets speeds up to ~4000m/s be stored
 
-
-cdef class WindMap(VectorMap):
-
-    cdef void set_xy_wind_(WindMap self, int[2] pos, vec2 wind_vec):
-        cdef int[2] int_vec
-        self._wind_to_int_vec(int_vec, wind_vec)
-        self.set_xy_vec_(pos, int_vec)
-
-    cdef void wind_from_xy_(self, vec2 wind_vec, vec2 pos):
-        cdef int[2] int_vec
-        self.vec_from_xy_(int_vec, pos)
-        self._int_vec_to_wind(wind_vec, int_vec)
-
-    cdef inline void _wind_to_int_vec(self, int[2] int_vec, vec2 wind_vec):
-        int_vec[0] = int(wind_vec.x * WIND_TO_INT_CONVERSION)
-        int_vec[1] = int(wind_vec.y * WIND_TO_INT_CONVERSION)
-
-    @cython.cdivision(True)
-    cdef inline void _int_vec_to_wind(self, vec2 wind_vec, int[2] int_vec):
-        wind_vec.x = int_vec[0] / WIND_TO_INT_CONVERSION
-        wind_vec.y = int_vec[1] / WIND_TO_INT_CONVERSION
-
-
-cpdef WindMap make_wind_map(
-        TMap warming_map,
+cpdef VecCubeMap make_wind_map(
+        GreyCubeMap warming_map,
         int seed,
         float mass,
         float radius,
@@ -82,23 +54,23 @@ cpdef WindMap make_wind_map(
     cdef int width = warming_map.width, height = warming_map.height
 
     # create map to store wind vectors within
-    cdef WindMap wind_map = WindMap(
+    cdef VecCubeMap wind_map = VecCubeMap(
         width=width,
-        height=height,
-        data_type=np.uint32)
+        height=height)
 
     # create noise map that will be used to create approximated
     # high / low pressure systems
-    cdef CubeMap noise_map = _make_noise_map(seed, width, height, radius, 3)
+    cdef GreyCubeMap noise_map = \
+        _make_noise_map(seed, width, height, radius, 3)
 
-    cdef CubeMap smoothed_pressure = _make_pressure_map(warming_map)
+    # cdef GreyCubeMap smoothed_pressure = _make_pressure_map(warming_map)
 
 
-cdef CubeMap _make_noise_map(
+cdef GreyCubeMap _make_noise_map(
         int seed, int width, int height, float radius, int hemi_bands):
 
-    cdef CubeMap noise_map = \
-        CubeMap(width=width, height=height, data_type=np.uint16)
+    cdef GreyCubeMap noise_map = \
+        GreyCubeMap(width=width, height=height)
 
     cdef PyFastNoise n = PyFastNoise()
     n.seed = seed
@@ -123,8 +95,8 @@ cdef CubeMap _make_noise_map(
         for y in range(height):
             pos[1] = y
             dbl_pos.y = y
-            vec = noise_map.vector_from_xy_(dbl_pos)
-            v = int(n.get_simplex_fractal_3d(vec.x, vec.y, vec.z) *
+            vec = vec3Normalize(noise_map.vector_from_xy_(dbl_pos))
+            v = int(n.get_simplex_fractal_3d_(vec) *
                     NOISE_SCALE + MEAN_NOISE_V)
             noise_map.set_xy_(pos, v)
 
@@ -141,7 +113,7 @@ DEF GAUSS_SAMPLES = 8  # for both x and y; total of n^2 samples taken
 DEF GAUSS_RADIUS = 32.
 
 
-cdef CubeMap _make_pressure_map(TMap warming_map):
+cdef GreyCubeMap _make_pressure_map(GreyCubeMap warming_map):
     """
     Generates a smoothed pressure map from the passed warming map
     The generated map stores arbitrary relative pressure, not absolute values.
@@ -157,8 +129,7 @@ cdef CubeMap _make_pressure_map(TMap warming_map):
         t0 = time()
         print('generating pressure map')
 
-    cdef CubeMap p_map = \
-        CubeMap(width=width, height=height, data_type=np.uint16)
+    cdef GreyCubeMap p_map = GreyCubeMap(width=width, height=height)
 
     for x in range(width):
         int_pos[0] = x
