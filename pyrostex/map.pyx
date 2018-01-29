@@ -121,13 +121,25 @@ cdef class AbstractMap:
             raise ValueError('Invalid height: {}'.format(self.height))
 
     cdef void _allocate_arr(self) except *:
+        """
+        Allocates array for map.
+        """
         raise NotImplementedError(
             'Abstract map without data type cannot be instantiated')
 
     cdef void _view_arr(self, AbstractMap m) except *:
+        """
+        Sets map data to be a view of passed map's data.
+        :param m: AbstractMap
+        """
         self._arr = m.get_arr()
 
     def __dealloc__(self):
+        """
+        De-allocates map array if it is owned
+        (not a view of another map's data),
+        otherwise does nothing.
+        """
         if self.has_original_array:
             free(self._arr)
 
@@ -165,6 +177,10 @@ cdef class AbstractMap:
         raise NotImplementedError
 
     cdef void *get_arr(self):
+        """
+        Returns pointer to map's data array
+        :return void *
+        """
         return self._arr
 
     # Position conversions
@@ -374,6 +390,12 @@ cdef class CubeMap(AbstractMap):
         return self.get_tile(self.tile_index_from_vector_(vector))
 
     cdef int tile_index_from_vector_(self, vec3 vector) nogil:
+        """
+        Returns index of tile containing position indicated by
+        passed vector.
+        :param vector vec3
+        :return int
+        """
         # prevent repeated calls to fabs and vector
         cdef double x, y, z, abs_x, abs_y, abs_z
         x = vector.x
@@ -530,6 +552,12 @@ cdef class CubeMap(AbstractMap):
         return lat_lon_from_vector_(self.vector_from_xy_(xy_pos))
 
     cpdef get_reference_position(self, tile_index):
+        """
+        Gets reference position of passed tile index.
+        Ex: tile 0 has reference position 0, 0.
+        :param tile_index: int
+        :return tuple[int]
+        """
         if not 0 <= tile_index < 6:  # if outside valid range
             raise IndexError(tile_index)
         elif tile_index < 3:
@@ -589,6 +617,12 @@ cdef class LatLonMap(AbstractMap):
     @cython.cdivision(True)
     @cython.wraparound(False)
     cdef vec2 xy_from_lat_lon_(self, latlon lat_lon) nogil except *:
+        """
+        Gets xy position of value in data array of passed
+        latitude-longitude value.
+        :param lat_lon: latlon
+        :return vec2
+        """
         cdef vec2 xy_pos
         cdef double x, y
         lat = lat_lon.lat
@@ -618,6 +652,12 @@ cdef class LatLonMap(AbstractMap):
 
     @cython.cdivision(True)
     cpdef tuple lat_lon_from_xy(self, tuple pos):
+        """
+        Gets latitude-longitude value associated with passed xy data
+        array index.
+        :param pos: tuple
+        :return tuple
+        """
         x, y = pos
         relative_x = x / self.width
         relative_y = y / self.height
@@ -772,6 +812,11 @@ cdef class TileMap(AbstractMap):
     @cython.cdivision(True)
     @cython.wraparound(False)
     cdef vec3 vector_from_xy_(self, vec2 pos) nogil except *:
+        """
+        Gets positon vector associated with passed array position.
+        :param pos: vec2
+        :return vec3
+        """
         cdef vec3 vector
         cdef double a, b, a_range, b_range
         cdef double min_rel_x, max_rel_x, min_rel_y, max_rel_y
@@ -849,6 +894,11 @@ cdef class CubeSide(TileMap):
         self._ref_pos = self._find_reference_position()
 
     cdef vec2 _find_reference_position(self):
+        """
+        Gets reference position in CubeMap data array of this cube side.
+        Ex: cube side 0 has reference position (0, 0).
+        :return vec2
+        """
         IF ASSERTS:
             assert 0 <= self.cube_face < 6, self.cube_face
         if self.cube_face < 3:
@@ -872,6 +922,10 @@ cdef class GreyCubeMap(CubeMap):
         self._arr = malloc(self.width * self.height * sizeof(a_t))
     
     cpdef void load_arr(self, unicode path) except *:
+        """
+        Loads array data from passed filepath.
+        :param path: unicode str
+        """
         cdef np.ndarray arr
     
         arr = np.load(path, allow_pickle=False)
@@ -901,6 +955,10 @@ cdef class GreyCubeMap(CubeMap):
                 (<a_t *>self._arr)[y * self.width + x] = arr[y, x]
     
     cpdef void save(self, unicode path) except *:
+        """
+        Saves map data to passed file path
+        :param path: unicode str
+        """
         n_arr = np.ndarray((self.height, self.width), dtype=np.float32)
     
         # populate numpy arr
@@ -911,6 +969,13 @@ cdef class GreyCubeMap(CubeMap):
         np.save(path, n_arr, allow_pickle=False)
     
     cdef void clone(self, AbstractMap p) except *:
+        """
+        Clones passed map. If map is of a different type
+        (ex: LatLonMap vs CubeMap) values will be copied depending on their
+        position vector.
+        Passed map must be of same data type.
+        :param p: prototype AbstractMap.
+        """
         if isinstance(p, GreyCubeMap):
             self.clone_(<GreyCubeMap> p)
         elif isinstance(p, GreyLatLonMap):
@@ -1309,6 +1374,10 @@ cdef class GreyLatLonMap(LatLonMap):
         self._arr = malloc(self.width * self.height * sizeof(a_t))
     
     cpdef void load_arr(self, unicode path) except *:
+        """
+        Loads array data from passed filepath.
+        :param path: unicode str
+        """
         cdef np.ndarray arr
     
         arr = np.load(path, allow_pickle=False)
@@ -1338,6 +1407,10 @@ cdef class GreyLatLonMap(LatLonMap):
                 (<a_t *>self._arr)[y * self.width + x] = arr[y, x]
     
     cpdef void save(self, unicode path) except *:
+        """
+        Saves map data to passed file path
+        :param path: unicode str
+        """
         n_arr = np.ndarray((self.height, self.width), dtype=np.float32)
     
         # populate numpy arr
@@ -1348,6 +1421,13 @@ cdef class GreyLatLonMap(LatLonMap):
         np.save(path, n_arr, allow_pickle=False)
     
     cdef void clone(self, AbstractMap p) except *:
+        """
+        Clones passed map. If map is of a different type
+        (ex: LatLonMap vs CubeMap) values will be copied depending on their
+        position vector.
+        Passed map must be of same data type.
+        :param p: prototype AbstractMap.
+        """
         if isinstance(p, GreyCubeMap):
             self.clone_(<GreyCubeMap> p)
         elif isinstance(p, GreyLatLonMap):
@@ -1746,6 +1826,10 @@ cdef class GreyTileMap(TileMap):
         self._arr = malloc(self.width * self.height * sizeof(a_t))
     
     cpdef void load_arr(self, unicode path) except *:
+        """
+        Loads array data from passed filepath.
+        :param path: unicode str
+        """
         cdef np.ndarray arr
     
         arr = np.load(path, allow_pickle=False)
@@ -1775,6 +1859,10 @@ cdef class GreyTileMap(TileMap):
                 (<a_t *>self._arr)[y * self.width + x] = arr[y, x]
     
     cpdef void save(self, unicode path) except *:
+        """
+        Saves map data to passed file path
+        :param path: unicode str
+        """
         n_arr = np.ndarray((self.height, self.width), dtype=np.float32)
     
         # populate numpy arr
@@ -1785,6 +1873,13 @@ cdef class GreyTileMap(TileMap):
         np.save(path, n_arr, allow_pickle=False)
     
     cdef void clone(self, AbstractMap p) except *:
+        """
+        Clones passed map. If map is of a different type
+        (ex: LatLonMap vs CubeMap) values will be copied depending on their
+        position vector.
+        Passed map must be of same data type.
+        :param p: prototype AbstractMap.
+        """
         if isinstance(p, GreyCubeMap):
             self.clone_(<GreyCubeMap> p)
         elif isinstance(p, GreyLatLonMap):
@@ -2183,6 +2278,10 @@ cdef class GreyCubeSide(CubeSide):
         self._arr = malloc(self.width * self.height * sizeof(a_t))
     
     cpdef void load_arr(self, unicode path) except *:
+        """
+        Loads array data from passed filepath.
+        :param path: unicode str
+        """
         cdef np.ndarray arr
     
         arr = np.load(path, allow_pickle=False)
@@ -2212,6 +2311,10 @@ cdef class GreyCubeSide(CubeSide):
                 (<a_t *>self._arr)[y * self.width + x] = arr[y, x]
     
     cpdef void save(self, unicode path) except *:
+        """
+        Saves map data to passed file path
+        :param path: unicode str
+        """
         n_arr = np.ndarray((self.height, self.width), dtype=np.float32)
     
         # populate numpy arr
@@ -2222,6 +2325,13 @@ cdef class GreyCubeSide(CubeSide):
         np.save(path, n_arr, allow_pickle=False)
     
     cdef void clone(self, AbstractMap p) except *:
+        """
+        Clones passed map. If map is of a different type
+        (ex: LatLonMap vs CubeMap) values will be copied depending on their
+        position vector.
+        Passed map must be of same data type.
+        :param p: prototype AbstractMap.
+        """
         if isinstance(p, GreyCubeMap):
             self.clone_(<GreyCubeMap> p)
         elif isinstance(p, GreyLatLonMap):
@@ -2627,6 +2737,13 @@ cdef class VecCubeMap(CubeMap):
         self._arr = malloc(self.width * self.height * sizeof(av))
     
     cdef void clone(self, AbstractMap p) except *:
+        """
+        Clones passed map. If map is of a different type
+        (ex: LatLonMap vs CubeMap) values will be copied depending on their
+        position vector.
+        Passed map must be of same data type.
+        :param p: prototype AbstractMap.
+        """
         if isinstance(p, VecCubeMap):
             self.clone_(<VecCubeMap> p)
         elif isinstance(p, VecLatLonMap):
@@ -2765,6 +2882,13 @@ cdef class VecLatLonMap(LatLonMap):
         self._arr = malloc(self.width * self.height * sizeof(av))
     
     cdef void clone(self, AbstractMap p) except *:
+        """
+        Clones passed map. If map is of a different type
+        (ex: LatLonMap vs CubeMap) values will be copied depending on their
+        position vector.
+        Passed map must be of same data type.
+        :param p: prototype AbstractMap.
+        """
         if isinstance(p, VecCubeMap):
             self.clone_(<VecCubeMap> p)
         elif isinstance(p, VecLatLonMap):
@@ -2903,6 +3027,13 @@ cdef class VecTileMap(TileMap):
         self._arr = malloc(self.width * self.height * sizeof(av))
     
     cdef void clone(self, AbstractMap p) except *:
+        """
+        Clones passed map. If map is of a different type
+        (ex: LatLonMap vs CubeMap) values will be copied depending on their
+        position vector.
+        Passed map must be of same data type.
+        :param p: prototype AbstractMap.
+        """
         if isinstance(p, VecCubeMap):
             self.clone_(<VecCubeMap> p)
         elif isinstance(p, VecLatLonMap):
@@ -3041,6 +3172,13 @@ cdef class VecCubeSide(CubeSide):
         self._arr = malloc(self.width * self.height * sizeof(av))
     
     cdef void clone(self, AbstractMap p) except *:
+        """
+        Clones passed map. If map is of a different type
+        (ex: LatLonMap vs CubeMap) values will be copied depending on their
+        position vector.
+        Passed map must be of same data type.
+        :param p: prototype AbstractMap.
+        """
         if isinstance(p, VecCubeMap):
             self.clone_(<VecCubeMap> p)
         elif isinstance(p, VecLatLonMap):
@@ -3185,6 +3323,12 @@ cdef class RegCubeMap(CubeMap):
         self._arr = malloc(self.width * self.height * sizeof(rt))
     
     cdef void clone(self, AbstractMap p) except *:
+        """
+        Clones passed map. If map is of a different type
+        (ex: LatLonMap vs CubeMap) values will be copied depending on their
+        position vector.
+        :param p: prototype AbstractMap.
+        """
         if isinstance(p, RegCubeMap):
             self.clone_(<RegCubeMap> p)
         elif isinstance(p, RegLatLonMap):
@@ -3320,6 +3464,12 @@ cdef class RegLatLonMap(LatLonMap):
         self._arr = malloc(self.width * self.height * sizeof(rt))
     
     cdef void clone(self, AbstractMap p) except *:
+        """
+        Clones passed map. If map is of a different type
+        (ex: LatLonMap vs CubeMap) values will be copied depending on their
+        position vector.
+        :param p: prototype AbstractMap.
+        """
         if isinstance(p, RegCubeMap):
             self.clone_(<RegCubeMap> p)
         elif isinstance(p, RegLatLonMap):
@@ -3455,6 +3605,12 @@ cdef class RegTileMap(TileMap):
         self._arr = malloc(self.width * self.height * sizeof(rt))
     
     cdef void clone(self, AbstractMap p) except *:
+        """
+        Clones passed map. If map is of a different type
+        (ex: LatLonMap vs CubeMap) values will be copied depending on their
+        position vector.
+        :param p: prototype AbstractMap.
+        """
         if isinstance(p, RegCubeMap):
             self.clone_(<RegCubeMap> p)
         elif isinstance(p, RegLatLonMap):
@@ -3590,6 +3746,12 @@ cdef class RegCubeSide(CubeSide):
         self._arr = malloc(self.width * self.height * sizeof(rt))
     
     cdef void clone(self, AbstractMap p) except *:
+        """
+        Clones passed map. If map is of a different type
+        (ex: LatLonMap vs CubeMap) values will be copied depending on their
+        position vector.
+        :param p: prototype AbstractMap.
+        """
         if isinstance(p, RegCubeMap):
             self.clone_(<RegCubeMap> p)
         elif isinstance(p, RegLatLonMap):

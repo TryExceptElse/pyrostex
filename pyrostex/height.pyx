@@ -22,6 +22,11 @@ DEF THREADS = 2  # todo: dynamically set
 
 
 cdef class WarpGenerator:
+    """
+    Generator of 3-value noise values, produced from 3d position input.
+    Intended to be used as input to other noise functions, to warp
+    the output.
+    """
     cdef int seed
     cdef PyFastNoise x_noise, y_noise, z_noise
 
@@ -37,6 +42,11 @@ cdef class WarpGenerator:
             n.fractal_octaves = octaves
 
     cdef vec3 get_warp(self, vec3 p) nogil:
+        """
+        Gets vec3 noise value from vec3 p
+        :param p: vec3
+        :return vec3
+        """
         return vec3New(
             self.x_noise.get_simplex_fractal_3d_(p),
             self.y_noise.get_simplex_fractal_3d_(p),
@@ -174,6 +184,10 @@ cpdef void make_tectonic_cube(
         GreyCubeMap tec_map,
         GreyLatLonMap raw_tec_map,
         object zone) except *:
+    """
+    Creates tectonic cube map from raw tectonic lat-lon map.
+    Warp is applied to introduce curvature of ridges in resulting map.
+    """
     cdef:
         WarpGenerator warp_gen = WarpGenerator(zone.seed, 0.5, 2)
         int[2] int_xy_pos
