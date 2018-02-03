@@ -2,7 +2,7 @@
 setup script for pyrostex
 
 example use; building extensions:
-    python setup.py build_ext --inplace --asserts
+    python setup.py build_ext --inplace --debug --test
 """
 import os
 import subprocess as sub
@@ -174,7 +174,7 @@ def set_up_project():
                     name='pyrostex.height',
                     sources=['pyrostex/height.pyx'],
                     language='c++',
-                    extra_compile_args=["-fopenmp", '-g', '-Og'],
+                    extra_compile_args=["-fopenmp", '-Ofast'],
                     extra_link_args=['-fopenmp'],
                 ),
                 Extension(
@@ -208,12 +208,12 @@ def set_up_project():
                     language="c++",
                     extra_compile_args=[
                         # "-ffast-math",
-                        # "-Ofast",
+                        "-Ofast",
                         '-std=c++11',
                     ],
                 ),
             ] + (test_extensions if flags['test'] else [])
-        ), gdb_debug=True),
+        ))
     )
 
 
