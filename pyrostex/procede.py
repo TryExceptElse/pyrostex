@@ -49,7 +49,8 @@ class Spheroid:
     ):
         logger = logging.getLogger(__name__)
         logger.info('Creating spheroid')
-        self.seed = seed
+        # seeds 46338 and larger cause failures. reason unknown.
+        self.seed = seed % 46337
         self.type = planet_type
         self.mass = mass
         self.mean_temp = mean_temp
