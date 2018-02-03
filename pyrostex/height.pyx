@@ -203,57 +203,6 @@ cdef bint build_h0_map(
             int_xy_pos[1] = y
             xy_pos.y = y
 
-            """
-            for x in range(h_width):
-                int_xy_pos[0] = x
-                xy_pos.x = x
-
-                # get vector identifying position to be sampled
-                pos_v = vec3Normalize(h_map.vector_from_xy_(xy_pos))
-
-                # create mountain / hill noise map --------------------
-
-                # get vector with which to warp sample position
-                pos_warp_v = vec3Multiply(warp_gen.get_warp(pos_v), warp_amp)
-                # get position at which to sample noise
-                sample_pos_v = vec3New(
-                    pos_v.x + pos_warp_v.x,
-                    pos_v.y + pos_warp_v.y,
-                    (pos_v.z + pos_warp_v.z) * 0.75  # reduce north-south frq
-                )
-
-                rm_result = \
-                    rm_noise.get_simplex_fractal_3d_(sample_pos_v) / 2 + 0.5
-
-                # find base value -------------------------------------
-
-                base_v = base_height_map.v_from_vector_(pos_v) / 300
-
-                # scale hill value ------------------------------------
-
-                rng_scaling = \
-                    amp_noise.get_simplex_fractal_3d_(sample_pos_v) / 2 + 0.5
-                base_scaling = base_v / 1e4
-                if base_scaling > 1:
-                    base_scaling = 1
-                scale_reduce = 1 - sqrt(fabs(base_v / 1e4))
-                if scale_reduce > 0:
-                    rng_scaling = reduce(rng_scaling, scale_reduce)
-                scaling = rng_scaling / 2 + base_scaling / 2
-
-                # create pseudo-erosion -------------------------------
-
-                erosion_level = scaling / 2
-                eroded_iq = erode(rm_result, erosion_level)
-
-                # create final height ---------------------------------
-
-                h = eroded_iq * scaling * iq_scale + base_v - \
-                    scaling / 2 / iq_scale
-
-                # store final result
-                h_map.set_xy_(int_xy_pos, h)
-            """
             # get position vectors in this row
             for x in range(h_width):
                 xy_pos.x = x
@@ -311,8 +260,6 @@ cdef bint build_h0_map(
                 # store final result
                 int_xy_pos[0] = x
                 h_map.set_xy_(int_xy_pos, h)
-
-            # """
 
         free(int_xy_pos)
         free(pos_v_set)
