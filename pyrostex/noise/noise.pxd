@@ -1,9 +1,12 @@
 from ..includes.cmathutils cimport vec2, vec3
 
 
-cdef extern from "FastNoise.h":
+cdef extern from "fast/FastNoise.h":
     cdef cppclass FastNoise:
+        enum FractalType "FastNoise::FractalType": FBM, Billow, RigidMulti
+
         FastNoise() except +
+        FastNoise(int seed) except +
 
         # getter / setters
         void SetSeed(int seed) nogil
@@ -16,6 +19,8 @@ cdef extern from "FastNoise.h":
         float GetFractalLacunarity() nogil
         void SetFractalGain(float gain) nogil
         float GetFractalGain() nogil
+        void SetFractalType(FractalType fractalType)
+        FractalType GetFractalType()
 
         # 2d
         float GetSimplex(float x, float y) nogil
