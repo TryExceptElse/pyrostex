@@ -17,7 +17,7 @@ added to this file as they are needed.
 
 cimport cython
 
-from libc.math cimport sin, cos, sqrt, pow, floor
+from libc.math cimport sin, cos, sqrt, pow, floor, isnan, NAN
 
 ctypedef double ft
 
@@ -81,11 +81,11 @@ cdef extern from "ccVector.h":
     vec3    vec3Reflect     (const vec3 n, const vec3 r)                nogil
     vec3    vec3Mix         (const vec3 a, const vec3 b, const ft f)    nogil
     int     vec3Equal       (const vec3 a, const vec3 b)                nogil
-    
+
     ###################################################################
     # VEC 4 FUNCTIONS
     ###################################################################
-    
+
     vec4    vec4Zero        ()                                          nogil
     vec4    vec4New         (const ft x, const ft y,
                              const ft z, const ft w)                    nogil
@@ -100,11 +100,11 @@ cdef extern from "ccVector.h":
     vec4    vec4Reflect     (const vec4 n, const vec4 r)                nogil
     vec4    vec4Mix         (const vec4 a, const vec4 b, const ft f)    nogil
     int     vec4Equal       (const vec4 a, const vec4 b)                nogil
-    
+
     ###################################################################
     # MAT 3X3 FUNCTIONS
     ###################################################################
-    
+
     void    mat3x3Zero              (mat3x3 m)                                  nogil
     int     mat3x3IsZero            (mat3x3 m)                                  nogil
     void    mat3x3Add               (mat3x3 m, const mat3x3 a, const mat3x3 b)  nogil
@@ -118,11 +118,11 @@ cdef extern from "ccVector.h":
     vec3    mat3x3GetCol            (mat3x3 m, const unsigned int n)            nogil
     void    mat3x3Transpose         (mat3x3 m, mat3x3 n)                        nogil
     int     mat3x3Equal             (mat3x3 a, mat3x3 b)                        nogil
-    
+
     ###################################################################
     # MAT 4X4 FUNCTIONS
     ###################################################################
-    
+
     void    mat4x4Zero              (mat4x4 m)
     int     mat4x4IsZero            (mat4x4 m)
     void    mat4x4Add               (mat4x4 m, const mat4x4 a, const mat4x4 b)
@@ -256,6 +256,32 @@ cdef inline vec3 vec3Sqrt(const vec3 v) nogil:
 
 cdef inline vec4 vec4Sqrt(const vec4 v) nogil:
     return vec4New(sqrt(v.x), sqrt(v.y), sqrt(v.z), sqrt(v.w))
+
+
+# nan vectors
+
+
+cdef inline vec2 vec2Nan() nogil:
+    return vec2New(NAN, NAN)
+
+cdef inline vec3 vec3Nan() nogil:
+    return vec3New(NAN, NAN, NAN)
+
+cdef inline vec4 vec4Nan() nogil:
+    return vec4New(NAN, NAN, NAN, NAN)
+
+
+# nan checks
+
+
+cdef inline int vec2IsNan(const vec2 v) nogil:
+    return isnan(v.x)
+
+cdef inline int vec3IsNan(const vec3 v) nogil:
+    return isnan(v.x)
+
+cdef inline int vec4IsNan(const vec4 v) nogil:
+    return isnan(v.x)
 
 
 # other

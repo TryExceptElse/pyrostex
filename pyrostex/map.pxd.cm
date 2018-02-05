@@ -46,6 +46,7 @@ ctypedef fused rgb_map_t:
     RgbCubeSide
 """
 
+
 #######################################################################
 # DECLARATION MACROS
 #######################################################################
@@ -53,26 +54,26 @@ ctypedef fused rgb_map_t:
 # grey-scale map declarations
 GREY_DATA_DECLARATIONS = macro("""
 
-cdef void clone_(self, grey_map_t p) except *
+cdef bint clone_(self, grey_map_t p) except False
 
 # value retrieval methods
 cpdef a_t v_from_lat_lon(self, pos) except? -1.
-cdef a_t v_from_lat_lon_(self, latlon pos) except? -1.
+cdef a_t v_from_lat_lon_(self, latlon pos)
 cpdef a_t v_from_xy(self, pos) except? -1.
-cdef a_t v_from_xy_(self, vec2 pos) nogil except? -1.
+cdef a_t v_from_xy_(self, vec2 pos) nogil
 cpdef a_t v_from_rel_xy(self, tuple pos) except? -1.
-cdef a_t v_from_rel_xy_(self, vec2 pos) except? -1.
-cdef a_t v_from_xy_indices_(self, int[2] pos) except? -1.
+cdef a_t v_from_rel_xy_(self, vec2 pos)
+cdef a_t v_from_xy_indices_(self, int[2] pos)
 cpdef a_t v_from_vector(self, vector) except? -1.
-cdef a_t v_from_vector_(self, vec3 vector) nogil except? -1.
+cdef a_t v_from_vector_(self, vec3 vector) nogil
 
 # value setters
-cpdef void set_xy(self, pos, v) except *
-cdef void set_xy_(self, int[2] pos, a_t v) nogil except *
+cpdef bint set_xy(self, pos, v) except False
+cdef void set_xy_(self, int[2] pos, a_t v) nogil
 
 # TextureMap specific methods
 cpdef object gradient_from_xy(self, tuple[double] pos)
-cdef vec2 gradient_from_xy_(self, vec2 pos) except *
+cdef vec2 gradient_from_xy_(self, vec2 pos) 
 cdef inline void _sample_pos(
         self,
         int[2] p0,
@@ -95,48 +96,48 @@ cdef double gauss_smooth_xy_(
 # vector map declarations
 VECTOR_DATA_DECLARATIONS = macro("""
 
-cdef void clone_(self, vec_map_t p) except *
+cdef bint clone_(self, vec_map_t p) except False
 
 # value retrieval methods
 cpdef av v_from_lat_lon(self, pos) except *
-cdef av v_from_lat_lon_(self, latlon pos) except *
+cdef av v_from_lat_lon_(self, latlon pos)
 cpdef av v_from_xy(self, pos) except *
-cdef av v_from_xy_(self, vec2 pos) nogil except *
+cdef av v_from_xy_(self, vec2 pos) nogil
 cpdef av v_from_rel_xy(self, tuple pos) except *
-cdef av v_from_rel_xy_(self, vec2 pos) except *
-cdef av v_from_xy_indices_(self, int[2] pos) except *
+cdef av v_from_rel_xy_(self, vec2 pos)
+cdef av v_from_xy_indices_(self, int[2] pos)
 cpdef av v_from_vector(self, vector) except *
-cdef av v_from_vector_(self, vec3 vector) nogil except *
+cdef av v_from_vector_(self, vec3 vector) nogil
 
 # setters
-cpdef void set_xy(self, pos, vec) except *
-cdef void set_xy_(self, int[2] pos, av vec) nogil except *
+cpdef bint set_xy(self, pos, vec) except False
+cdef void set_xy_(self, int[2] pos, av vec) nogil
 
-cdef av sample(self, vec2 pos) nogil except *
+cdef av sample(self, vec2 pos) nogil
 
 """)
 
 # region map declarations
 REGION_DATA_DECLARATIONS = macro("""
 
-cdef void clone_(self, reg_map_t p) except *
+cdef bint clone_(self, reg_map_t p) except False
 
 # value retrieval methods
 cpdef rt v_from_lat_lon(self, pos) except *
-cdef rt v_from_lat_lon_(self, latlon pos) except *
+cdef rt v_from_lat_lon_(self, latlon pos)
 cpdef rt v_from_xy(self, pos) except *
-cdef rt v_from_xy_(self, vec2 pos) nogil except *
+cdef rt v_from_xy_(self, vec2 pos) nogil
 cpdef rt v_from_rel_xy(self, tuple pos) except *
-cdef rt v_from_rel_xy_(self, vec2 pos) except *
-cdef rt v_from_xy_indices_(self, int[2] pos) except *
+cdef rt v_from_rel_xy_(self, vec2 pos)
+cdef rt v_from_xy_indices_(self, int[2] pos)
 cpdef rt v_from_vector(self, vector) except *
-cdef rt v_from_vector_(self, vec3 vector) nogil except *
+cdef rt v_from_vector_(self, vec3 vector) nogil
 
 # setters
-cpdef void set_xy(self, pos, r) except *
-cdef void set_xy_(self, int[2] pos, rt r) nogil except *
+cpdef bint set_xy(self, pos, r) except False
+cdef void set_xy_(self, int[2] pos, rt r) nogil
 
-cdef rt sample(self, vec2 pos) nogil except *
+cdef rt sample(self, vec2 pos) nogil
 
 """)
 
@@ -159,30 +160,30 @@ cdef class AbstractMap:
         vec2 _ref_pos
 
     # array handling methods
-    cdef void _allocate_arr(self) except *
-    cdef void clone(self, AbstractMap p) except *
-    cpdef void load_arr(self, unicode path) except *
-    cpdef void save(self, unicode path) except *
-    cdef void set_arr(self, void *arr)
-    cdef void *get_arr(self)
-    cdef void _view_arr(self, AbstractMap m) except *
+    cdef bint _allocate_arr(self) except False
+    cdef bint clone(self, AbstractMap p) except False
+    cpdef bint load_arr(self, unicode path) except False
+    cpdef bint save(self, unicode path) except False
+    cdef bint set_arr(self, void *arr) except False
+    cdef void *get_arr(self) except NULL
+    cdef bint _view_arr(self, AbstractMap m) except False
 
     # position conversion methods
     cpdef tuple xy_from_lat_lon(self, pos)
-    cdef vec2 xy_from_lat_lon_(self, latlon pos) nogil except *
+    cdef vec2 xy_from_lat_lon_(self, latlon pos) nogil
     cpdef tuple xy_from_rel_xy(self, pos)
-    cdef vec2 xy_from_rel_xy_(self, vec2 pos) nogil except *
+    cdef vec2 xy_from_rel_xy_(self, vec2 pos) nogil
     cpdef tuple xy_from_vector(self, vector)
-    cdef vec2 xy_from_vector_(self, vec3 vector) nogil except *
+    cdef vec2 xy_from_vector_(self, vec3 vector) nogil
 
     # other conversion methods
     cpdef object vector_from_xy(self, pos)
-    cdef vec3 vector_from_xy_(self, vec2 pos) nogil except *
+    cdef vec3 vector_from_xy_(self, vec2 pos) nogil
     cpdef tuple lat_lon_from_xy(self, tuple pos)
-    cdef latlon lat_lon_from_xy_(self, vec2 xy_pos) nogil except *
+    cdef latlon lat_lon_from_xy_(self, vec2 xy_pos) nogil
 
     # out
-    cpdef void write_png(self, unicode out) except *
+    cpdef bint write_png(self, unicode out) except False
 
 
 cdef class CubeMap(AbstractMap):
@@ -205,9 +206,9 @@ cdef class CubeMap(AbstractMap):
     cdef int tile_index_from_vector_(self, vec3 vector) nogil
     cpdef short tile_index_from_xy(self, pos)
     cdef short tile_index_from_xy_(self, vec2 pos) nogil
-    cdef vec3 vector_from_tile_xy_(self, int tile_index, vec2 pos) nogil except *
+    cdef vec3 vector_from_tile_xy_(self, int tile_index, vec2 pos) nogil
     cpdef get_reference_position(self, tile_index)
-    cdef vec2 reference_position_(self, int tile_index) nogil except *
+    cdef vec2 reference_position_(self, int tile_index) nogil
 
 
 cdef class LatLonMap(AbstractMap):
@@ -309,9 +310,9 @@ ELSE:
 #######################################################################
 
 cpdef rt pure_region(int region_code) except *
-cdef rt pure_region_(int region_code) nogil except *
+cdef rt pure_region_(int region_code) nogil
 cpdef rt mix_region(rt r0, float w0, rt r1, float w1) except *
-cdef rt mix_region_(rt r0, float w0, rt r1, float w1) nogil except *
+cdef rt mix_region_(rt r0, float w0, rt r1, float w1) nogil
 
 cpdef mix_av(v0, float w0, v1, float w1)
-cdef av mix_av_(av v0, float w0, av v1, float w1) nogil except *
+cdef av mix_av_(av v0, float w0, av v1, float w1) nogil

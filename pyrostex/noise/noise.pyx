@@ -2,6 +2,11 @@
 Handles use of fast noise library
 """
 
+from libc.stdlib cimport free
+
+cdef enum FractalType:
+    FBM, Billow, RigidMulti
+
 
 cdef class PyFastNoise:
     """
@@ -52,6 +57,25 @@ cdef class PyFastNoise:
     @fractal_gain.setter
     def fractal_gain(self, gain):
         self.n.SetFractalGain(gain)
+
+    @property
+    def fractal_type(self):
+        cdef FractalType t = self.n.GetFractalType()
+        if t == FractalType.FBM:
+            return 'FBM'
+        elif t == FractalType.Billow:
+            return 'Billow'
+        elif t == FractalType.RigidMulti:
+            return 'RigidMulti'
+
+    @fractal_type.setter
+    def fractal_type(self, unicode fractal_type):
+        if fractal_type == 'FBM':
+            self.n.SetFractalType(FractalType.FBM)
+        elif fractal_type == 'Billow':
+            self.n.SetFractalType(FractalType.Billow)
+        elif fractal_type == 'RigidMulti':
+            self.n.SetFractalType(FractalType.RigidMulti)
 
     # 2d
 

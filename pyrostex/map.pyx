@@ -32,6 +32,7 @@ from mathutils import Vector
 from math import radians
 from libc.math cimport cos, sin, atan2, sqrt, pow, fabs, ceil, log2, isnan
 from libc.stdlib cimport malloc, free
+from libc.stdio cimport fprintf, stderr
 
 # from cymacro import macro  # dummy function for defining macros
 
@@ -120,19 +121,20 @@ cdef class AbstractMap:
         if not self.height > 0:
             raise ValueError('Invalid height: {}'.format(self.height))
 
-    cdef void _allocate_arr(self) except *:
+    cdef bint _allocate_arr(self) except False:
         """
         Allocates array for map.
         """
         raise NotImplementedError(
             'Abstract map without data type cannot be instantiated')
 
-    cdef void _view_arr(self, AbstractMap m) except *:
+    cdef bint _view_arr(self, AbstractMap m) except False:
         """
         Sets map data to be a view of passed map's data.
         :param m: AbstractMap
         """
         self._arr = m.get_arr()
+        return 1
 
     def __dealloc__(self):
         """
@@ -143,29 +145,30 @@ cdef class AbstractMap:
         if self.has_original_array:
             free(self._arr)
 
-    cpdef void load_arr(self, unicode path) except *:
+    cpdef bint load_arr(self, unicode path) except False:
         """
         Loads and returns texture data from passed path.
         :param str path
         """
         raise NotImplementedError
 
-    cpdef void save(self, unicode path) except *:
+    cpdef bint save(self, unicode path) except False:
         """
         Saves TextureMap data to passed path.
         :param str path
         """
         raise NotImplementedError
 
-    cdef void set_arr(self, void *arr):
+    cdef bint set_arr(self, void *arr) except False:
         """
         Sets array to that passed
         """
         free(self._arr)
         self.has_original_array = False
         self._arr = arr
+        return 1
 
-    cdef void clone(self, AbstractMap p) except *:
+    cdef bint clone(self, AbstractMap p) except False:
         """
         Clones array information from passed prototype, converting
         information to a new format (Cube from LatLon for example)
@@ -176,7 +179,7 @@ cdef class AbstractMap:
         """
         raise NotImplementedError
 
-    cdef void *get_arr(self):
+    cdef void *get_arr(self) except NULL:
         """
         Returns pointer to map's data array
         :return void *
@@ -188,21 +191,21 @@ cdef class AbstractMap:
     cpdef tuple xy_from_lat_lon(self, pos):
         raise NotImplementedError()
 
-    cdef vec2 xy_from_lat_lon_(self, latlon pos) nogil except *:
+    cdef vec2 xy_from_lat_lon_(self, latlon pos) nogil:
         with gil:
             raise NotImplementedError()
 
     cpdef tuple xy_from_rel_xy(self, pos):
         raise NotImplementedError()
 
-    cdef vec2 xy_from_rel_xy_(self, vec2 pos) nogil except *:
+    cdef vec2 xy_from_rel_xy_(self, vec2 pos) nogil:
         with gil:
             raise NotImplementedError()
 
     cpdef tuple xy_from_vector(self, vector):
         raise NotImplementedError()
 
-    cdef vec2 xy_from_vector_(self, vec3 vector) nogil except *:
+    cdef vec2 xy_from_vector_(self, vec3 vector) nogil:
         with gil:
             raise NotImplementedError()
 
@@ -211,20 +214,20 @@ cdef class AbstractMap:
     cpdef object vector_from_xy(self, pos):
         raise NotImplementedError()
 
-    cdef vec3 vector_from_xy_(self, vec2 pos) nogil except *:
+    cdef vec3 vector_from_xy_(self, vec2 pos) nogil:
         with gil:
             raise NotImplementedError()
 
     cpdef tuple lat_lon_from_xy(self, tuple pos):
         raise NotImplementedError()
 
-    cdef latlon lat_lon_from_xy_(self, vec2 xy_pos) nogil except *:
+    cdef latlon lat_lon_from_xy_(self, vec2 xy_pos) nogil:
         with gil:
             raise NotImplementedError()
 
     # Out
 
-    cpdef void write_png(self, unicode out) except *:
+    cpdef bint write_png(self, unicode out) except False:
         raise NotImplementedError()
 
     @property
@@ -288,23 +291,24 @@ cdef class CubeMap(AbstractMap):
         :return: x, y
         """
         v = self.xy_from_vector_(cp2v_3d(vector))
+        if mu.vec2IsNan(v):
+            raise ValueError('Error in xy_from_vector')
         return v.x, v.y
 
-    cdef vec2 xy_from_vector_(self, vec3 vector) nogil except *:
-        # cdef latlon lat_lon = lat_lon_from_vector_(vector)
-        # cdef TileMap tile = self.tile_from_lat_lon_(lat_lon)
-        # return tile.xy_from_vector_(vector)
+    @cython.cdivision(True)
+    cdef vec2 xy_from_vector_(self, vec3 vector) nogil:
         
         cdef int face = self.tile_index_from_vector_(vector)
-        cdef double x, y, z
+        cdef double x, y, z, a, b
         cdef vec2 pos
 
         x = vector.x
         y = vector.y
         z = vector.z
         if x == 0. and y == 0. and z == 0.:
-            with gil:
-                raise ValueError('Passed vector was (0, 0, 0)')
+            IF ASSERTS:
+                with gil:
+                    raise ValueError('Passed vector was (0, 0, 0)')
         if face == 0:
             a = y / x
             b = z / x
@@ -324,8 +328,12 @@ cdef class CubeMap(AbstractMap):
             a = x / z
             b = y / -z
         else:
-            with gil:
-                raise IndexError(face)
+            IF ASSERTS:
+                with gil:
+                    raise IndexError(face)
+            ELSE:
+                fprintf(stderr, "Bad face: %d", face)
+                return mu.vec2Nan()
         # correct minor floating point errors (~1e-12 or smaller)
         if a < -1:
             IF ASSERTS:
@@ -347,11 +355,6 @@ cdef class CubeMap(AbstractMap):
                 with gil:
                     assert b - 1 < 1e-12, b
             b = 1
-        IF ASSERTS:
-            with gil:
-                assert -1 <= a <= 1 and -1 <= b <= 1, \
-                    'position outside expected range: ({},{}), tile: {}' \
-                    .format(a, b, face)
         # convert a and b from (-1,-1) range to (0,1)
         pos.x = (a / 2 + 0.5) * (self.tile_width - 1)
         pos.y = (b / 2 + 0.5) * (self.tile_height - 1)
@@ -458,14 +461,15 @@ cdef class CubeMap(AbstractMap):
         Private method for finding the index corresponding to
         a passed position.
         """
-        if not 0 <= pos.x < self.width:
-            with gil:
-                raise ValueError(
-                    'x {} outside range: 0-{}'.format(pos.x, self.width))
-        if not 0 <= pos.y < self.height:
-            with gil:
-                raise ValueError(
-                    'y {} outside range: 0-{}'.format(pos.y, self.height))
+        IF ASSERTS:
+            if not 0 <= pos.x < self.width:
+                with gil:
+                    raise ValueError(
+                        'x {} outside range: 0-{}'.format(pos.x, self.width))
+            if not 0 <= pos.y < self.height:
+                with gil:
+                    raise ValueError(
+                        'y {} outside range: 0-{}'.format(pos.y, self.height))
         if pos.x < self.tile_width:
             i = 0
         elif pos.x < self.two_thirds_width:
@@ -482,7 +486,7 @@ cdef class CubeMap(AbstractMap):
         return Vector((vector_.x, vector_.y, vector_.z))
 
     @cython.wraparound(False)
-    cdef vec3 vector_from_xy_(self, vec2 pos) nogil except *:
+    cdef vec3 vector_from_xy_(self, vec2 pos) nogil:
         cdef vec2 tile_ref_pos
         cdef vec2 rel_pos
 
@@ -499,20 +503,21 @@ cdef class CubeMap(AbstractMap):
 
     @cython.cdivision(True)
     @cython.wraparound(False)
-    cdef vec3 vector_from_tile_xy_(self, int tile_index, vec2 pos) nogil except *:
+    cdef vec3 vector_from_tile_xy_(self, int tile_index, vec2 pos) nogil:
         """
         Gets vector from xy position of passed face tile
         """
         cdef vec3 vector
         a_index, b_index = pos.x, pos.y
-        if not 0 <= a_index < self.tile_width:
-            with gil:
-                raise ValueError('Passed x {} was outside range 0-{}'
-                                 .format(a_index, self.tile_width))
-        if not 0 <= b_index < self.tile_height:
-            with gil:
-                raise ValueError('Passed y {} was outside range 0-{}'
-                                 .format(b_index, self.tile_height))
+        IF ASSERTS:
+            if not 0 <= a_index < self.tile_width:
+                with gil:
+                    raise ValueError('Passed x {} was outside range 0-{}'
+                                     .format(a_index, self.tile_width))
+            if not 0 <= b_index < self.tile_height:
+                with gil:
+                    raise ValueError('Passed y {} was outside range 0-{}'
+                                     .format(b_index, self.tile_height))
         min_rel_x = -1
         min_rel_y = -1
         max_rel_x = 1
@@ -544,11 +549,15 @@ cdef class CubeMap(AbstractMap):
         elif tile_index == 5:
             vector.x, vector.y, vector.z = -a, b, -1
         else:
-            with gil:
-                raise ValueError('Invalid face index: {}'.format(tile_index))
+            IF ASSERTS:
+                with gil:
+                    raise ValueError(
+                        'Invalid face index: {}'.format(tile_index))
+            ELSE:
+                return mu.vec3Nan()
         return vector
 
-    cdef latlon lat_lon_from_xy_(self, vec2 xy_pos) nogil except *:
+    cdef latlon lat_lon_from_xy_(self, vec2 xy_pos) nogil:
         return lat_lon_from_vector_(self.vector_from_xy_(xy_pos))
 
     cpdef get_reference_position(self, tile_index):
@@ -565,7 +574,7 @@ cdef class CubeMap(AbstractMap):
         elif tile_index < 6:
             return (tile_index - 3) * self.tile_width, self.tile_height
 
-    cdef vec2 reference_position_(self, int tile_index) nogil except *:
+    cdef vec2 reference_position_(self, int tile_index) nogil:
         cdef vec2 ref_pos
         IF ASSERTS:
             with gil:
@@ -604,7 +613,7 @@ cdef class LatLonMap(AbstractMap):
         """
         return self.xy_from_vector_(cp2v_3d(vector))
 
-    cdef vec2 xy_from_vector_(self, vec3 vector) nogil except *:
+    cdef vec2 xy_from_vector_(self, vec3 vector) nogil:
         return self.xy_from_lat_lon_(lat_lon_from_vector_(vector))
 
     @cython.wraparound(False)
@@ -616,7 +625,7 @@ cdef class LatLonMap(AbstractMap):
 
     @cython.cdivision(True)
     @cython.wraparound(False)
-    cdef vec2 xy_from_lat_lon_(self, latlon lat_lon) nogil except *:
+    cdef vec2 xy_from_lat_lon_(self, latlon lat_lon) nogil:
         """
         Gets xy position of value in data array of passed
         latitude-longitude value.
@@ -719,7 +728,7 @@ cdef class TileMap(AbstractMap):
 
     @cython.cdivision(True)
     @cython.wraparound(False)
-    cdef vec2 xy_from_vector_(self, vec3 vector) nogil except *:
+    cdef vec2 xy_from_vector_(self, vec3 vector) nogil:
         """
         Gets value associated with passed vector.
         Unlike above version, vector is a struct, not an object.
@@ -730,8 +739,9 @@ cdef class TileMap(AbstractMap):
         y = vector.y
         z = vector.z
         if x == 0. and y == 0. and z == 0.:
-            with gil:
-                raise ValueError('Passed vector was (0, 0, 0)')
+            IF ASSERTS:
+                with gil:
+                    raise ValueError('Passed vector was (0, 0, 0)')
         if self.cube_face == 0:
             a = y / x
             b = z / x
@@ -751,40 +761,47 @@ cdef class TileMap(AbstractMap):
             a = x / z
             b = y / -z
         else:
-            with gil:
-                raise IndexError(self.cube_face)
+            IF ASSERTS:
+                with gil:
+                    raise IndexError(self.cube_face)
         # correct minor floating point errors (~1e-12 or smaller)
         if a < -1:
             IF ASSERTS:
-                assert a + 1 > -1e-12, a
+                with gil:
+                    assert a + 1 > -1e-12, a
             a = -1
         if a > 1:
             IF ASSERTS:
-                assert a - 1 < 1e-12, a
+                with gil:
+                    assert a - 1 < 1e-12, a
             a = 1
         if b < -1:
             IF ASSERTS:
-                assert b + 1 > -1e-12, b
+                with gil:
+                    assert b + 1 > -1e-12, b
             b = -1
         if b > 1:
             IF ASSERTS:
-                assert b - 1 < 1e-12, b
+                with gil:
+                    assert b - 1 < 1e-12, b
             b = 1
         IF ASSERTS:
-            assert -1 <= a <= 1 and -1 <= b <= 1, \
-                'position outside expected range: ({},{}), tile: {}' \
+            with gil:
+                assert -1 <= a <= 1 and -1 <= b <= 1, \
+                    'position outside expected range: ({},{}), tile: {}' \
                 .format(a, b, self.cube_face)
         # convert a and b from (-1,-1) range to (0,1)
         pos.x = a / 2 + 0.5
         pos.y = b / 2 + 0.5
         IF ASSERTS:
-            assert 0 <= pos.x <= 1, \
-                'a value: {}, tile: {}'.format(pos.x, self.cube_face)
-            assert 0 <= pos.y <= 1, \
-                'b value: {}, tile: {}'.format(pos.y, self.cube_face)
+            with gil:
+                assert 0 <= pos.x <= 1, \
+                    'a value: {}, tile: {}'.format(pos.x, self.cube_face)
+                assert 0 <= pos.y <= 1, \
+                    'b value: {}, tile: {}'.format(pos.y, self.cube_face)
         return self.xy_from_rel_xy_(pos)
 
-    cdef vec2 xy_from_rel_xy_(self, vec2 pos) nogil except *:
+    cdef vec2 xy_from_rel_xy_(self, vec2 pos) nogil:
         return mu.vec2New(
             pos.x * (self.width - 1) + self._ref_pos.x,
             pos.y * (self.height - 1) + self._ref_pos.y
@@ -811,7 +828,7 @@ cdef class TileMap(AbstractMap):
 
     @cython.cdivision(True)
     @cython.wraparound(False)
-    cdef vec3 vector_from_xy_(self, vec2 pos) nogil except *:
+    cdef vec3 vector_from_xy_(self, vec2 pos) nogil:
         """
         Gets positon vector associated with passed array position.
         :param pos: vec2
@@ -821,14 +838,15 @@ cdef class TileMap(AbstractMap):
         cdef double a, b, a_range, b_range
         cdef double min_rel_x, max_rel_x, min_rel_y, max_rel_y
         a_index, b_index = pos.x, pos.y
-        if not 0 <= a_index <= self.width - 1:
-            with gil:
-                raise ValueError('Passed x {} was outside range 0-{}'
-                                 .format(a_index, self.width))
-        if not 0 <= b_index <= self.height - 1:
-            with gil:
-                raise ValueError('Passed x {} was outside range 0-{}'
-                                 .format(b_index, self.height))
+        IF ASSERTS:
+            if not 0 <= a_index <= self.width - 1:
+                with gil:
+                    raise ValueError('Passed x {} was outside range 0-{}'
+                                     .format(a_index, self.width))
+            if not 0 <= b_index <= self.height - 1:
+                with gil:
+                    raise ValueError('Passed x {} was outside range 0-{}'
+                                     .format(b_index, self.height))
         min_rel_x = self.p1.x
         min_rel_y = self.p1.y
         max_rel_x = self.p2.x
@@ -860,9 +878,10 @@ cdef class TileMap(AbstractMap):
         elif self.cube_face == 5:
             vector.x, vector.y, vector.z = -a, b, -1
         else:
-            with gil:
-                raise ValueError(
-                    'Invalid face index: {}'.format(self.cube_face))
+            IF ASSERTS:
+                with gil:
+                    raise ValueError(
+                        'Invalid face index: {}'.format(self.cube_face))
         return vector
 
 
@@ -918,10 +937,11 @@ cdef class CubeSide(TileMap):
 
 cdef class GreyCubeMap(CubeMap):
     
-    cdef void _allocate_arr(self) except *:
+    cdef bint _allocate_arr(self) except False:
         self._arr = malloc(self.width * self.height * sizeof(a_t))
+        return 1
     
-    cpdef void load_arr(self, unicode path) except *:
+    cpdef bint load_arr(self, unicode path) except False:
         """
         Loads array data from passed filepath.
         :param path: unicode str
@@ -953,8 +973,9 @@ cdef class GreyCubeMap(CubeMap):
         for y in range(self.height):
             for x in range(self.width):
                 (<a_t *>self._arr)[y * self.width + x] = arr[y, x]
+        return 1
     
-    cpdef void save(self, unicode path) except *:
+    cpdef bint save(self, unicode path) except False:
         """
         Saves map data to passed file path
         :param path: unicode str
@@ -967,8 +988,9 @@ cdef class GreyCubeMap(CubeMap):
                 n_arr[y, x] = (<a_t *>self._arr)[y * self.width + x]
     
         np.save(path, n_arr, allow_pickle=False)
+        return 1
     
-    cdef void clone(self, AbstractMap p) except *:
+    cdef bint clone(self, AbstractMap p) except False:
         """
         Clones passed map. If map is of a different type
         (ex: LatLonMap vs CubeMap) values will be copied depending on their
@@ -986,8 +1008,9 @@ cdef class GreyCubeMap(CubeMap):
             self.clone_(<GreyCubeSide> p)
         else:
             raise TypeError(f'Unexpected prototype map type: {p}')
+        return 1
     
-    cdef void clone_(self, grey_map_t p) except *:
+    cdef bint clone_(self, grey_map_t p) except False:
         cdef vec2 pos
         cdef vec3 vector
         cdef int[2] map_pos
@@ -1002,6 +1025,7 @@ cdef class GreyCubeMap(CubeMap):
                 map_pos[0] = x
                 map_pos[1] = y
                 self.set_xy_(map_pos, v)
+        return 1
     
     cpdef a_t v_from_lat_lon(self, pos) except? -1.:
         """
@@ -1011,7 +1035,7 @@ cdef class GreyCubeMap(CubeMap):
         """
         return self.v_from_lat_lon_(cp2ll(pos))
     
-    cdef a_t v_from_lat_lon_(self, latlon pos) except? -1.:
+    cdef a_t v_from_lat_lon_(self, latlon pos):
         """
         Gets value stored for passed latitude, longitude
         :param pos lat, lon
@@ -1034,7 +1058,7 @@ cdef class GreyCubeMap(CubeMap):
                              .format(pos_.y, self.height))
         return self.v_from_xy_(pos_)
     
-    cdef a_t v_from_xy_(self, vec2 pos) nogil except? -1.:
+    cdef a_t v_from_xy_(self, vec2 pos) nogil:
         """
         Gets pixel value at passed position on this map.
         Given a position between indices, will return a weighted
@@ -1042,12 +1066,6 @@ cdef class GreyCubeMap(CubeMap):
         :param pos: pos
         :return: int
         """
-        if not 0 <= pos.x <= self.width - 1:
-            with gil:
-                raise ValueError('x ({}) outside valid range'.format(pos.x))
-        if not 0 <= pos.y <= self.height - 1:
-            with gil:
-                raise ValueError('y ({}) outside valid range'.format(pos.x))
         return self.sample(pos)
     
     cpdef a_t v_from_rel_xy(self, tuple pos) except? -1.:
@@ -1062,7 +1080,7 @@ cdef class GreyCubeMap(CubeMap):
         cdef vec2 pos_ = cp2v_2d(pos)
         return self.v_from_rel_xy_(pos_)
     
-    cdef a_t v_from_rel_xy_(self, vec2 pos) except? -1.:
+    cdef a_t v_from_rel_xy_(self, vec2 pos):
         """
         Gets value stored for passed x, y position in TextureMap data.
         :param pos x, y floats in range (0-1) inclusive
@@ -1079,7 +1097,7 @@ cdef class GreyCubeMap(CubeMap):
             assert 0 <= abs_pos.y <= self.height
         return self.v_from_xy_(abs_pos)
     
-    cdef a_t v_from_xy_indices_(self, int[2] pos) except? -1.:
+    cdef a_t v_from_xy_indices_(self, int[2] pos):
         """
         Gets value stored in data array at passed x, y indices.
         :param pos int x, int y
@@ -1100,7 +1118,7 @@ cdef class GreyCubeMap(CubeMap):
         """
         return self.v_from_vector_(cp2v_3d(vector))
     
-    cdef a_t v_from_vector_(self, vec3 vector) nogil except? -1.:
+    cdef a_t v_from_vector_(self, vec3 vector) nogil:
         """
         Gets pixel value identified by vector.
         :param vector: vec3
@@ -1120,7 +1138,7 @@ cdef class GreyCubeMap(CubeMap):
         return Vector((gr.x, gr.y))
     
     @cython.cdivision(True)
-    cdef vec2 gradient_from_xy_(self, vec2 pos) except *:
+    cdef vec2 gradient_from_xy_(self, vec2 pos):
         """
         Gets gradient of map as a vec2 at passed position.
         :param pos x, y doubles
@@ -1236,7 +1254,7 @@ cdef class GreyCubeMap(CubeMap):
             assert sum >= 0, "sum: " + str(sum)
         return sum
     
-    cpdef void set_xy(self, pos, v) except *:
+    cpdef bint set_xy(self, pos, v) except False:
         cdef int[2] pos_
         pos_[0] = <int>pos[0]
         pos_[1] = <int>pos[1]
@@ -1247,8 +1265,12 @@ cdef class GreyCubeMap(CubeMap):
             raise ValueError('Height {} outside range 0 - {}'
                              .format(pos_[1], self.height))
         self.set_xy_(pos_, v)
+        return 1
     
-    cdef void set_xy_(self, int[2] pos, a_t v) nogil except *:
+    cdef void set_xy_(self, int[2] pos, a_t v) nogil:
+        IF ASSERTS:
+            if isnan(v):
+                fprintf(stderr, 'GreyMap.set_xy_(): got NaN value')
         (<a_t *> self._arr)[pos[1] * self.width + pos[0]] = v
     
     @cython.wraparound(False)
@@ -1315,7 +1337,7 @@ cdef class GreyCubeMap(CubeMap):
     
     @cython.cdivision(True)
     @cython.wraparound(False)
-    cpdef void write_png(self, unicode out) except *:
+    cpdef bint write_png(self, unicode out) except False:
         """
         Writes map as a png to the passed path.
         :param out: path String
@@ -1354,7 +1376,7 @@ cdef class GreyCubeMap(CubeMap):
                         break
                     out_v = (v - min) * 255 / (max - min)
                     IF ASSERTS:
-                        assert 0 <= out_v < 256, f'{x},{y}: {out_v}'
+                        assert 0 <= out_v < 256, f'{x},{y}: data: {v} out: {out_v}'
                     out_arr[y][x] = out_v
                 if restart:
                     break
@@ -1366,14 +1388,16 @@ cdef class GreyCubeMap(CubeMap):
             width = len(out_arr[0])
             w = png.Writer(width, height, greyscale=True)
             w.write(f, out_arr)
+        return 1
     
 
 cdef class GreyLatLonMap(LatLonMap):
     
-    cdef void _allocate_arr(self) except *:
+    cdef bint _allocate_arr(self) except False:
         self._arr = malloc(self.width * self.height * sizeof(a_t))
+        return 1
     
-    cpdef void load_arr(self, unicode path) except *:
+    cpdef bint load_arr(self, unicode path) except False:
         """
         Loads array data from passed filepath.
         :param path: unicode str
@@ -1405,8 +1429,9 @@ cdef class GreyLatLonMap(LatLonMap):
         for y in range(self.height):
             for x in range(self.width):
                 (<a_t *>self._arr)[y * self.width + x] = arr[y, x]
+        return 1
     
-    cpdef void save(self, unicode path) except *:
+    cpdef bint save(self, unicode path) except False:
         """
         Saves map data to passed file path
         :param path: unicode str
@@ -1419,8 +1444,9 @@ cdef class GreyLatLonMap(LatLonMap):
                 n_arr[y, x] = (<a_t *>self._arr)[y * self.width + x]
     
         np.save(path, n_arr, allow_pickle=False)
+        return 1
     
-    cdef void clone(self, AbstractMap p) except *:
+    cdef bint clone(self, AbstractMap p) except False:
         """
         Clones passed map. If map is of a different type
         (ex: LatLonMap vs CubeMap) values will be copied depending on their
@@ -1438,8 +1464,9 @@ cdef class GreyLatLonMap(LatLonMap):
             self.clone_(<GreyCubeSide> p)
         else:
             raise TypeError(f'Unexpected prototype map type: {p}')
+        return 1
     
-    cdef void clone_(self, grey_map_t p) except *:
+    cdef bint clone_(self, grey_map_t p) except False:
         cdef vec2 pos
         cdef vec3 vector
         cdef int[2] map_pos
@@ -1454,6 +1481,7 @@ cdef class GreyLatLonMap(LatLonMap):
                 map_pos[0] = x
                 map_pos[1] = y
                 self.set_xy_(map_pos, v)
+        return 1
     
     cpdef a_t v_from_lat_lon(self, pos) except? -1.:
         """
@@ -1463,7 +1491,7 @@ cdef class GreyLatLonMap(LatLonMap):
         """
         return self.v_from_lat_lon_(cp2ll(pos))
     
-    cdef a_t v_from_lat_lon_(self, latlon pos) except? -1.:
+    cdef a_t v_from_lat_lon_(self, latlon pos):
         """
         Gets value stored for passed latitude, longitude
         :param pos lat, lon
@@ -1486,7 +1514,7 @@ cdef class GreyLatLonMap(LatLonMap):
                              .format(pos_.y, self.height))
         return self.v_from_xy_(pos_)
     
-    cdef a_t v_from_xy_(self, vec2 pos) nogil except? -1.:
+    cdef a_t v_from_xy_(self, vec2 pos) nogil:
         """
         Gets pixel value at passed position on this map.
         Given a position between indices, will return a weighted
@@ -1494,12 +1522,6 @@ cdef class GreyLatLonMap(LatLonMap):
         :param pos: pos
         :return: int
         """
-        if not 0 <= pos.x <= self.width - 1:
-            with gil:
-                raise ValueError('x ({}) outside valid range'.format(pos.x))
-        if not 0 <= pos.y <= self.height - 1:
-            with gil:
-                raise ValueError('y ({}) outside valid range'.format(pos.x))
         return self.sample(pos)
     
     cpdef a_t v_from_rel_xy(self, tuple pos) except? -1.:
@@ -1514,7 +1536,7 @@ cdef class GreyLatLonMap(LatLonMap):
         cdef vec2 pos_ = cp2v_2d(pos)
         return self.v_from_rel_xy_(pos_)
     
-    cdef a_t v_from_rel_xy_(self, vec2 pos) except? -1.:
+    cdef a_t v_from_rel_xy_(self, vec2 pos):
         """
         Gets value stored for passed x, y position in TextureMap data.
         :param pos x, y floats in range (0-1) inclusive
@@ -1531,7 +1553,7 @@ cdef class GreyLatLonMap(LatLonMap):
             assert 0 <= abs_pos.y <= self.height
         return self.v_from_xy_(abs_pos)
     
-    cdef a_t v_from_xy_indices_(self, int[2] pos) except? -1.:
+    cdef a_t v_from_xy_indices_(self, int[2] pos):
         """
         Gets value stored in data array at passed x, y indices.
         :param pos int x, int y
@@ -1552,7 +1574,7 @@ cdef class GreyLatLonMap(LatLonMap):
         """
         return self.v_from_vector_(cp2v_3d(vector))
     
-    cdef a_t v_from_vector_(self, vec3 vector) nogil except? -1.:
+    cdef a_t v_from_vector_(self, vec3 vector) nogil:
         """
         Gets pixel value identified by vector.
         :param vector: vec3
@@ -1572,7 +1594,7 @@ cdef class GreyLatLonMap(LatLonMap):
         return Vector((gr.x, gr.y))
     
     @cython.cdivision(True)
-    cdef vec2 gradient_from_xy_(self, vec2 pos) except *:
+    cdef vec2 gradient_from_xy_(self, vec2 pos):
         """
         Gets gradient of map as a vec2 at passed position.
         :param pos x, y doubles
@@ -1688,7 +1710,7 @@ cdef class GreyLatLonMap(LatLonMap):
             assert sum >= 0, "sum: " + str(sum)
         return sum
     
-    cpdef void set_xy(self, pos, v) except *:
+    cpdef bint set_xy(self, pos, v) except False:
         cdef int[2] pos_
         pos_[0] = <int>pos[0]
         pos_[1] = <int>pos[1]
@@ -1699,8 +1721,12 @@ cdef class GreyLatLonMap(LatLonMap):
             raise ValueError('Height {} outside range 0 - {}'
                              .format(pos_[1], self.height))
         self.set_xy_(pos_, v)
+        return 1
     
-    cdef void set_xy_(self, int[2] pos, a_t v) nogil except *:
+    cdef void set_xy_(self, int[2] pos, a_t v) nogil:
+        IF ASSERTS:
+            if isnan(v):
+                fprintf(stderr, 'GreyMap.set_xy_(): got NaN value')
         (<a_t *> self._arr)[pos[1] * self.width + pos[0]] = v
     
     @cython.wraparound(False)
@@ -1767,7 +1793,7 @@ cdef class GreyLatLonMap(LatLonMap):
     
     @cython.cdivision(True)
     @cython.wraparound(False)
-    cpdef void write_png(self, unicode out) except *:
+    cpdef bint write_png(self, unicode out) except False:
         """
         Writes map as a png to the passed path.
         :param out: path String
@@ -1806,7 +1832,7 @@ cdef class GreyLatLonMap(LatLonMap):
                         break
                     out_v = (v - min) * 255 / (max - min)
                     IF ASSERTS:
-                        assert 0 <= out_v < 256, f'{x},{y}: {out_v}'
+                        assert 0 <= out_v < 256, f'{x},{y}: data: {v} out: {out_v}'
                     out_arr[y][x] = out_v
                 if restart:
                     break
@@ -1818,14 +1844,16 @@ cdef class GreyLatLonMap(LatLonMap):
             width = len(out_arr[0])
             w = png.Writer(width, height, greyscale=True)
             w.write(f, out_arr)
+        return 1
     
 
 cdef class GreyTileMap(TileMap):
     
-    cdef void _allocate_arr(self) except *:
+    cdef bint _allocate_arr(self) except False:
         self._arr = malloc(self.width * self.height * sizeof(a_t))
+        return 1
     
-    cpdef void load_arr(self, unicode path) except *:
+    cpdef bint load_arr(self, unicode path) except False:
         """
         Loads array data from passed filepath.
         :param path: unicode str
@@ -1857,8 +1885,9 @@ cdef class GreyTileMap(TileMap):
         for y in range(self.height):
             for x in range(self.width):
                 (<a_t *>self._arr)[y * self.width + x] = arr[y, x]
+        return 1
     
-    cpdef void save(self, unicode path) except *:
+    cpdef bint save(self, unicode path) except False:
         """
         Saves map data to passed file path
         :param path: unicode str
@@ -1871,8 +1900,9 @@ cdef class GreyTileMap(TileMap):
                 n_arr[y, x] = (<a_t *>self._arr)[y * self.width + x]
     
         np.save(path, n_arr, allow_pickle=False)
+        return 1
     
-    cdef void clone(self, AbstractMap p) except *:
+    cdef bint clone(self, AbstractMap p) except False:
         """
         Clones passed map. If map is of a different type
         (ex: LatLonMap vs CubeMap) values will be copied depending on their
@@ -1890,8 +1920,9 @@ cdef class GreyTileMap(TileMap):
             self.clone_(<GreyCubeSide> p)
         else:
             raise TypeError(f'Unexpected prototype map type: {p}')
+        return 1
     
-    cdef void clone_(self, grey_map_t p) except *:
+    cdef bint clone_(self, grey_map_t p) except False:
         cdef vec2 pos
         cdef vec3 vector
         cdef int[2] map_pos
@@ -1906,6 +1937,7 @@ cdef class GreyTileMap(TileMap):
                 map_pos[0] = x
                 map_pos[1] = y
                 self.set_xy_(map_pos, v)
+        return 1
     
     cpdef a_t v_from_lat_lon(self, pos) except? -1.:
         """
@@ -1915,7 +1947,7 @@ cdef class GreyTileMap(TileMap):
         """
         return self.v_from_lat_lon_(cp2ll(pos))
     
-    cdef a_t v_from_lat_lon_(self, latlon pos) except? -1.:
+    cdef a_t v_from_lat_lon_(self, latlon pos):
         """
         Gets value stored for passed latitude, longitude
         :param pos lat, lon
@@ -1938,7 +1970,7 @@ cdef class GreyTileMap(TileMap):
                              .format(pos_.y, self.height))
         return self.v_from_xy_(pos_)
     
-    cdef a_t v_from_xy_(self, vec2 pos) nogil except? -1.:
+    cdef a_t v_from_xy_(self, vec2 pos) nogil:
         """
         Gets pixel value at passed position on this map.
         Given a position between indices, will return a weighted
@@ -1946,12 +1978,6 @@ cdef class GreyTileMap(TileMap):
         :param pos: pos
         :return: int
         """
-        if not 0 <= pos.x <= self.width - 1:
-            with gil:
-                raise ValueError('x ({}) outside valid range'.format(pos.x))
-        if not 0 <= pos.y <= self.height - 1:
-            with gil:
-                raise ValueError('y ({}) outside valid range'.format(pos.x))
         return self.sample(pos)
     
     cpdef a_t v_from_rel_xy(self, tuple pos) except? -1.:
@@ -1966,7 +1992,7 @@ cdef class GreyTileMap(TileMap):
         cdef vec2 pos_ = cp2v_2d(pos)
         return self.v_from_rel_xy_(pos_)
     
-    cdef a_t v_from_rel_xy_(self, vec2 pos) except? -1.:
+    cdef a_t v_from_rel_xy_(self, vec2 pos):
         """
         Gets value stored for passed x, y position in TextureMap data.
         :param pos x, y floats in range (0-1) inclusive
@@ -1983,7 +2009,7 @@ cdef class GreyTileMap(TileMap):
             assert 0 <= abs_pos.y <= self.height
         return self.v_from_xy_(abs_pos)
     
-    cdef a_t v_from_xy_indices_(self, int[2] pos) except? -1.:
+    cdef a_t v_from_xy_indices_(self, int[2] pos):
         """
         Gets value stored in data array at passed x, y indices.
         :param pos int x, int y
@@ -2004,7 +2030,7 @@ cdef class GreyTileMap(TileMap):
         """
         return self.v_from_vector_(cp2v_3d(vector))
     
-    cdef a_t v_from_vector_(self, vec3 vector) nogil except? -1.:
+    cdef a_t v_from_vector_(self, vec3 vector) nogil:
         """
         Gets pixel value identified by vector.
         :param vector: vec3
@@ -2024,7 +2050,7 @@ cdef class GreyTileMap(TileMap):
         return Vector((gr.x, gr.y))
     
     @cython.cdivision(True)
-    cdef vec2 gradient_from_xy_(self, vec2 pos) except *:
+    cdef vec2 gradient_from_xy_(self, vec2 pos):
         """
         Gets gradient of map as a vec2 at passed position.
         :param pos x, y doubles
@@ -2140,7 +2166,7 @@ cdef class GreyTileMap(TileMap):
             assert sum >= 0, "sum: " + str(sum)
         return sum
     
-    cpdef void set_xy(self, pos, v) except *:
+    cpdef bint set_xy(self, pos, v) except False:
         cdef int[2] pos_
         pos_[0] = <int>pos[0]
         pos_[1] = <int>pos[1]
@@ -2151,8 +2177,12 @@ cdef class GreyTileMap(TileMap):
             raise ValueError('Height {} outside range 0 - {}'
                              .format(pos_[1], self.height))
         self.set_xy_(pos_, v)
+        return 1
     
-    cdef void set_xy_(self, int[2] pos, a_t v) nogil except *:
+    cdef void set_xy_(self, int[2] pos, a_t v) nogil:
+        IF ASSERTS:
+            if isnan(v):
+                fprintf(stderr, 'GreyMap.set_xy_(): got NaN value')
         (<a_t *> self._arr)[pos[1] * self.width + pos[0]] = v
     
     @cython.wraparound(False)
@@ -2219,7 +2249,7 @@ cdef class GreyTileMap(TileMap):
     
     @cython.cdivision(True)
     @cython.wraparound(False)
-    cpdef void write_png(self, unicode out) except *:
+    cpdef bint write_png(self, unicode out) except False:
         """
         Writes map as a png to the passed path.
         :param out: path String
@@ -2258,7 +2288,7 @@ cdef class GreyTileMap(TileMap):
                         break
                     out_v = (v - min) * 255 / (max - min)
                     IF ASSERTS:
-                        assert 0 <= out_v < 256, f'{x},{y}: {out_v}'
+                        assert 0 <= out_v < 256, f'{x},{y}: data: {v} out: {out_v}'
                     out_arr[y][x] = out_v
                 if restart:
                     break
@@ -2270,14 +2300,16 @@ cdef class GreyTileMap(TileMap):
             width = len(out_arr[0])
             w = png.Writer(width, height, greyscale=True)
             w.write(f, out_arr)
+        return 1
     
 
 cdef class GreyCubeSide(CubeSide):
     
-    cdef void _allocate_arr(self) except *:
+    cdef bint _allocate_arr(self) except False:
         self._arr = malloc(self.width * self.height * sizeof(a_t))
+        return 1
     
-    cpdef void load_arr(self, unicode path) except *:
+    cpdef bint load_arr(self, unicode path) except False:
         """
         Loads array data from passed filepath.
         :param path: unicode str
@@ -2309,8 +2341,9 @@ cdef class GreyCubeSide(CubeSide):
         for y in range(self.height):
             for x in range(self.width):
                 (<a_t *>self._arr)[y * self.width + x] = arr[y, x]
+        return 1
     
-    cpdef void save(self, unicode path) except *:
+    cpdef bint save(self, unicode path) except False:
         """
         Saves map data to passed file path
         :param path: unicode str
@@ -2323,8 +2356,9 @@ cdef class GreyCubeSide(CubeSide):
                 n_arr[y, x] = (<a_t *>self._arr)[y * self.width + x]
     
         np.save(path, n_arr, allow_pickle=False)
+        return 1
     
-    cdef void clone(self, AbstractMap p) except *:
+    cdef bint clone(self, AbstractMap p) except False:
         """
         Clones passed map. If map is of a different type
         (ex: LatLonMap vs CubeMap) values will be copied depending on their
@@ -2342,8 +2376,9 @@ cdef class GreyCubeSide(CubeSide):
             self.clone_(<GreyCubeSide> p)
         else:
             raise TypeError(f'Unexpected prototype map type: {p}')
+        return 1
     
-    cdef void clone_(self, grey_map_t p) except *:
+    cdef bint clone_(self, grey_map_t p) except False:
         cdef vec2 pos
         cdef vec3 vector
         cdef int[2] map_pos
@@ -2358,6 +2393,7 @@ cdef class GreyCubeSide(CubeSide):
                 map_pos[0] = x
                 map_pos[1] = y
                 self.set_xy_(map_pos, v)
+        return 1
     
     cpdef a_t v_from_lat_lon(self, pos) except? -1.:
         """
@@ -2367,7 +2403,7 @@ cdef class GreyCubeSide(CubeSide):
         """
         return self.v_from_lat_lon_(cp2ll(pos))
     
-    cdef a_t v_from_lat_lon_(self, latlon pos) except? -1.:
+    cdef a_t v_from_lat_lon_(self, latlon pos):
         """
         Gets value stored for passed latitude, longitude
         :param pos lat, lon
@@ -2390,7 +2426,7 @@ cdef class GreyCubeSide(CubeSide):
                              .format(pos_.y, self.height))
         return self.v_from_xy_(pos_)
     
-    cdef a_t v_from_xy_(self, vec2 pos) nogil except? -1.:
+    cdef a_t v_from_xy_(self, vec2 pos) nogil:
         """
         Gets pixel value at passed position on this map.
         Given a position between indices, will return a weighted
@@ -2398,12 +2434,6 @@ cdef class GreyCubeSide(CubeSide):
         :param pos: pos
         :return: int
         """
-        if not 0 <= pos.x <= self.width - 1:
-            with gil:
-                raise ValueError('x ({}) outside valid range'.format(pos.x))
-        if not 0 <= pos.y <= self.height - 1:
-            with gil:
-                raise ValueError('y ({}) outside valid range'.format(pos.x))
         return self.sample(pos)
     
     cpdef a_t v_from_rel_xy(self, tuple pos) except? -1.:
@@ -2418,7 +2448,7 @@ cdef class GreyCubeSide(CubeSide):
         cdef vec2 pos_ = cp2v_2d(pos)
         return self.v_from_rel_xy_(pos_)
     
-    cdef a_t v_from_rel_xy_(self, vec2 pos) except? -1.:
+    cdef a_t v_from_rel_xy_(self, vec2 pos):
         """
         Gets value stored for passed x, y position in TextureMap data.
         :param pos x, y floats in range (0-1) inclusive
@@ -2435,7 +2465,7 @@ cdef class GreyCubeSide(CubeSide):
             assert 0 <= abs_pos.y <= self.height
         return self.v_from_xy_(abs_pos)
     
-    cdef a_t v_from_xy_indices_(self, int[2] pos) except? -1.:
+    cdef a_t v_from_xy_indices_(self, int[2] pos):
         """
         Gets value stored in data array at passed x, y indices.
         :param pos int x, int y
@@ -2456,7 +2486,7 @@ cdef class GreyCubeSide(CubeSide):
         """
         return self.v_from_vector_(cp2v_3d(vector))
     
-    cdef a_t v_from_vector_(self, vec3 vector) nogil except? -1.:
+    cdef a_t v_from_vector_(self, vec3 vector) nogil:
         """
         Gets pixel value identified by vector.
         :param vector: vec3
@@ -2476,7 +2506,7 @@ cdef class GreyCubeSide(CubeSide):
         return Vector((gr.x, gr.y))
     
     @cython.cdivision(True)
-    cdef vec2 gradient_from_xy_(self, vec2 pos) except *:
+    cdef vec2 gradient_from_xy_(self, vec2 pos):
         """
         Gets gradient of map as a vec2 at passed position.
         :param pos x, y doubles
@@ -2592,7 +2622,7 @@ cdef class GreyCubeSide(CubeSide):
             assert sum >= 0, "sum: " + str(sum)
         return sum
     
-    cpdef void set_xy(self, pos, v) except *:
+    cpdef bint set_xy(self, pos, v) except False:
         cdef int[2] pos_
         pos_[0] = <int>pos[0]
         pos_[1] = <int>pos[1]
@@ -2603,8 +2633,12 @@ cdef class GreyCubeSide(CubeSide):
             raise ValueError('Height {} outside range 0 - {}'
                              .format(pos_[1], self.height))
         self.set_xy_(pos_, v)
+        return 1
     
-    cdef void set_xy_(self, int[2] pos, a_t v) nogil except *:
+    cdef void set_xy_(self, int[2] pos, a_t v) nogil:
+        IF ASSERTS:
+            if isnan(v):
+                fprintf(stderr, 'GreyMap.set_xy_(): got NaN value')
         (<a_t *> self._arr)[pos[1] * self.width + pos[0]] = v
     
     @cython.wraparound(False)
@@ -2671,7 +2705,7 @@ cdef class GreyCubeSide(CubeSide):
     
     @cython.cdivision(True)
     @cython.wraparound(False)
-    cpdef void write_png(self, unicode out) except *:
+    cpdef bint write_png(self, unicode out) except False:
         """
         Writes map as a png to the passed path.
         :param out: path String
@@ -2710,7 +2744,7 @@ cdef class GreyCubeSide(CubeSide):
                         break
                     out_v = (v - min) * 255 / (max - min)
                     IF ASSERTS:
-                        assert 0 <= out_v < 256, f'{x},{y}: {out_v}'
+                        assert 0 <= out_v < 256, f'{x},{y}: data: {v} out: {out_v}'
                     out_arr[y][x] = out_v
                 if restart:
                     break
@@ -2722,6 +2756,7 @@ cdef class GreyCubeSide(CubeSide):
             width = len(out_arr[0])
             w = png.Writer(width, height, greyscale=True)
             w.write(f, out_arr)
+        return 1
     
 
 
@@ -2733,10 +2768,11 @@ cdef class GreyCubeSide(CubeSide):
 cdef class VecCubeMap(CubeMap):
     
     
-    cdef void _allocate_arr(self) except *:
+    cdef bint _allocate_arr(self) except False:
         self._arr = malloc(self.width * self.height * sizeof(av))
+        return 1
     
-    cdef void clone(self, AbstractMap p) except *:
+    cdef bint clone(self, AbstractMap p) except False:
         """
         Clones passed map. If map is of a different type
         (ex: LatLonMap vs CubeMap) values will be copied depending on their
@@ -2754,8 +2790,9 @@ cdef class VecCubeMap(CubeMap):
             self.clone_(<VecCubeSide> p)
         else:
             raise TypeError(f'Unexpected prototype map type: {p}')
+        return 1
     
-    cdef void clone_(self, vec_map_t p) except *:
+    cdef bint clone_(self, vec_map_t p) except False:
         cdef vec2 pos
         cdef vec3 vector
         cdef int[2] map_pos
@@ -2770,37 +2807,38 @@ cdef class VecCubeMap(CubeMap):
                 map_pos[0] = x
                 map_pos[1] = y
                 self.set_xy_(map_pos, v)
+        return 1
     
     # value retrieval methods
     cpdef av v_from_lat_lon(self, pos) except *:
         return self.v_from_lat_lon_(cp2ll(pos))
     
-    cdef av v_from_lat_lon_(self, latlon pos) except *:
+    cdef av v_from_lat_lon_(self, latlon pos):
         return self.v_from_xy_(self.xy_from_lat_lon_(pos))
     
     cpdef av v_from_xy(self, pos) except *:
         return self.v_from_xy_(cp2v_2d(pos))
     
-    cdef av v_from_xy_(self, vec2 pos) nogil except *:
+    cdef av v_from_xy_(self, vec2 pos) nogil:
         return self.sample(pos)
     
     cpdef av v_from_rel_xy(self, tuple pos) except *:
         return self.v_from_rel_xy_(cp2v_2d(pos))
     
-    cdef av v_from_rel_xy_(self, vec2 pos) except *:
+    cdef av v_from_rel_xy_(self, vec2 pos):
         return self.v_from_xy_(self.xy_from_rel_xy_(pos))
     
-    cdef av v_from_xy_indices_(self, int[2] pos) except *:
+    cdef av v_from_xy_indices_(self, int[2] pos):
         return (<av *> self._arr)[pos[1] * self.width + pos[0]]
     
     cpdef av v_from_vector(self, vector) except *:
         return self.v_from_vector_(cp2v_3d(vector))
     
-    cdef av v_from_vector_(self, vec3 vector) nogil except *:
+    cdef av v_from_vector_(self, vec3 vector) nogil:
         return self.v_from_xy_(self.xy_from_vector_(vector))
     
     # setters
-    cpdef void set_xy(self, pos, vec) except *:
+    cpdef bint set_xy(self, pos, vec) except False:
         cdef int[2] pos_
         cdef av vec_
         pos_[0] = pos[0]
@@ -2808,13 +2846,14 @@ cdef class VecCubeMap(CubeMap):
         vec_.x = vec[0]
         vec_.y = vec[1]
         self.set_xy_(pos_, vec_)
+        return 1
     
-    cdef void set_xy_(self, int[2] pos, av vec) nogil except *:
+    cdef void set_xy_(self, int[2] pos, av vec) nogil:
         (<av *> self._arr)[pos[1] * self.width + pos[0]] = vec
     
     @cython.wraparound(False)
     @cython.initializedcheck(False)
-    cdef av sample(self, vec2 pos) nogil except *:
+    cdef av sample(self, vec2 pos) nogil:
         """
         Samples array at passed position
     
@@ -2878,10 +2917,11 @@ cdef class VecCubeMap(CubeMap):
 cdef class VecLatLonMap(LatLonMap):
     
     
-    cdef void _allocate_arr(self) except *:
+    cdef bint _allocate_arr(self) except False:
         self._arr = malloc(self.width * self.height * sizeof(av))
+        return 1
     
-    cdef void clone(self, AbstractMap p) except *:
+    cdef bint clone(self, AbstractMap p) except False:
         """
         Clones passed map. If map is of a different type
         (ex: LatLonMap vs CubeMap) values will be copied depending on their
@@ -2899,8 +2939,9 @@ cdef class VecLatLonMap(LatLonMap):
             self.clone_(<VecCubeSide> p)
         else:
             raise TypeError(f'Unexpected prototype map type: {p}')
+        return 1
     
-    cdef void clone_(self, vec_map_t p) except *:
+    cdef bint clone_(self, vec_map_t p) except False:
         cdef vec2 pos
         cdef vec3 vector
         cdef int[2] map_pos
@@ -2915,37 +2956,38 @@ cdef class VecLatLonMap(LatLonMap):
                 map_pos[0] = x
                 map_pos[1] = y
                 self.set_xy_(map_pos, v)
+        return 1
     
     # value retrieval methods
     cpdef av v_from_lat_lon(self, pos) except *:
         return self.v_from_lat_lon_(cp2ll(pos))
     
-    cdef av v_from_lat_lon_(self, latlon pos) except *:
+    cdef av v_from_lat_lon_(self, latlon pos):
         return self.v_from_xy_(self.xy_from_lat_lon_(pos))
     
     cpdef av v_from_xy(self, pos) except *:
         return self.v_from_xy_(cp2v_2d(pos))
     
-    cdef av v_from_xy_(self, vec2 pos) nogil except *:
+    cdef av v_from_xy_(self, vec2 pos) nogil:
         return self.sample(pos)
     
     cpdef av v_from_rel_xy(self, tuple pos) except *:
         return self.v_from_rel_xy_(cp2v_2d(pos))
     
-    cdef av v_from_rel_xy_(self, vec2 pos) except *:
+    cdef av v_from_rel_xy_(self, vec2 pos):
         return self.v_from_xy_(self.xy_from_rel_xy_(pos))
     
-    cdef av v_from_xy_indices_(self, int[2] pos) except *:
+    cdef av v_from_xy_indices_(self, int[2] pos):
         return (<av *> self._arr)[pos[1] * self.width + pos[0]]
     
     cpdef av v_from_vector(self, vector) except *:
         return self.v_from_vector_(cp2v_3d(vector))
     
-    cdef av v_from_vector_(self, vec3 vector) nogil except *:
+    cdef av v_from_vector_(self, vec3 vector) nogil:
         return self.v_from_xy_(self.xy_from_vector_(vector))
     
     # setters
-    cpdef void set_xy(self, pos, vec) except *:
+    cpdef bint set_xy(self, pos, vec) except False:
         cdef int[2] pos_
         cdef av vec_
         pos_[0] = pos[0]
@@ -2953,13 +2995,14 @@ cdef class VecLatLonMap(LatLonMap):
         vec_.x = vec[0]
         vec_.y = vec[1]
         self.set_xy_(pos_, vec_)
+        return 1
     
-    cdef void set_xy_(self, int[2] pos, av vec) nogil except *:
+    cdef void set_xy_(self, int[2] pos, av vec) nogil:
         (<av *> self._arr)[pos[1] * self.width + pos[0]] = vec
     
     @cython.wraparound(False)
     @cython.initializedcheck(False)
-    cdef av sample(self, vec2 pos) nogil except *:
+    cdef av sample(self, vec2 pos) nogil:
         """
         Samples array at passed position
     
@@ -3023,10 +3066,11 @@ cdef class VecLatLonMap(LatLonMap):
 cdef class VecTileMap(TileMap):
     
     
-    cdef void _allocate_arr(self) except *:
+    cdef bint _allocate_arr(self) except False:
         self._arr = malloc(self.width * self.height * sizeof(av))
+        return 1
     
-    cdef void clone(self, AbstractMap p) except *:
+    cdef bint clone(self, AbstractMap p) except False:
         """
         Clones passed map. If map is of a different type
         (ex: LatLonMap vs CubeMap) values will be copied depending on their
@@ -3044,8 +3088,9 @@ cdef class VecTileMap(TileMap):
             self.clone_(<VecCubeSide> p)
         else:
             raise TypeError(f'Unexpected prototype map type: {p}')
+        return 1
     
-    cdef void clone_(self, vec_map_t p) except *:
+    cdef bint clone_(self, vec_map_t p) except False:
         cdef vec2 pos
         cdef vec3 vector
         cdef int[2] map_pos
@@ -3060,37 +3105,38 @@ cdef class VecTileMap(TileMap):
                 map_pos[0] = x
                 map_pos[1] = y
                 self.set_xy_(map_pos, v)
+        return 1
     
     # value retrieval methods
     cpdef av v_from_lat_lon(self, pos) except *:
         return self.v_from_lat_lon_(cp2ll(pos))
     
-    cdef av v_from_lat_lon_(self, latlon pos) except *:
+    cdef av v_from_lat_lon_(self, latlon pos):
         return self.v_from_xy_(self.xy_from_lat_lon_(pos))
     
     cpdef av v_from_xy(self, pos) except *:
         return self.v_from_xy_(cp2v_2d(pos))
     
-    cdef av v_from_xy_(self, vec2 pos) nogil except *:
+    cdef av v_from_xy_(self, vec2 pos) nogil:
         return self.sample(pos)
     
     cpdef av v_from_rel_xy(self, tuple pos) except *:
         return self.v_from_rel_xy_(cp2v_2d(pos))
     
-    cdef av v_from_rel_xy_(self, vec2 pos) except *:
+    cdef av v_from_rel_xy_(self, vec2 pos):
         return self.v_from_xy_(self.xy_from_rel_xy_(pos))
     
-    cdef av v_from_xy_indices_(self, int[2] pos) except *:
+    cdef av v_from_xy_indices_(self, int[2] pos):
         return (<av *> self._arr)[pos[1] * self.width + pos[0]]
     
     cpdef av v_from_vector(self, vector) except *:
         return self.v_from_vector_(cp2v_3d(vector))
     
-    cdef av v_from_vector_(self, vec3 vector) nogil except *:
+    cdef av v_from_vector_(self, vec3 vector) nogil:
         return self.v_from_xy_(self.xy_from_vector_(vector))
     
     # setters
-    cpdef void set_xy(self, pos, vec) except *:
+    cpdef bint set_xy(self, pos, vec) except False:
         cdef int[2] pos_
         cdef av vec_
         pos_[0] = pos[0]
@@ -3098,13 +3144,14 @@ cdef class VecTileMap(TileMap):
         vec_.x = vec[0]
         vec_.y = vec[1]
         self.set_xy_(pos_, vec_)
+        return 1
     
-    cdef void set_xy_(self, int[2] pos, av vec) nogil except *:
+    cdef void set_xy_(self, int[2] pos, av vec) nogil:
         (<av *> self._arr)[pos[1] * self.width + pos[0]] = vec
     
     @cython.wraparound(False)
     @cython.initializedcheck(False)
-    cdef av sample(self, vec2 pos) nogil except *:
+    cdef av sample(self, vec2 pos) nogil:
         """
         Samples array at passed position
     
@@ -3168,10 +3215,11 @@ cdef class VecTileMap(TileMap):
 cdef class VecCubeSide(CubeSide):
     
     
-    cdef void _allocate_arr(self) except *:
+    cdef bint _allocate_arr(self) except False:
         self._arr = malloc(self.width * self.height * sizeof(av))
+        return 1
     
-    cdef void clone(self, AbstractMap p) except *:
+    cdef bint clone(self, AbstractMap p) except False:
         """
         Clones passed map. If map is of a different type
         (ex: LatLonMap vs CubeMap) values will be copied depending on their
@@ -3189,8 +3237,9 @@ cdef class VecCubeSide(CubeSide):
             self.clone_(<VecCubeSide> p)
         else:
             raise TypeError(f'Unexpected prototype map type: {p}')
+        return 1
     
-    cdef void clone_(self, vec_map_t p) except *:
+    cdef bint clone_(self, vec_map_t p) except False:
         cdef vec2 pos
         cdef vec3 vector
         cdef int[2] map_pos
@@ -3205,37 +3254,38 @@ cdef class VecCubeSide(CubeSide):
                 map_pos[0] = x
                 map_pos[1] = y
                 self.set_xy_(map_pos, v)
+        return 1
     
     # value retrieval methods
     cpdef av v_from_lat_lon(self, pos) except *:
         return self.v_from_lat_lon_(cp2ll(pos))
     
-    cdef av v_from_lat_lon_(self, latlon pos) except *:
+    cdef av v_from_lat_lon_(self, latlon pos):
         return self.v_from_xy_(self.xy_from_lat_lon_(pos))
     
     cpdef av v_from_xy(self, pos) except *:
         return self.v_from_xy_(cp2v_2d(pos))
     
-    cdef av v_from_xy_(self, vec2 pos) nogil except *:
+    cdef av v_from_xy_(self, vec2 pos) nogil:
         return self.sample(pos)
     
     cpdef av v_from_rel_xy(self, tuple pos) except *:
         return self.v_from_rel_xy_(cp2v_2d(pos))
     
-    cdef av v_from_rel_xy_(self, vec2 pos) except *:
+    cdef av v_from_rel_xy_(self, vec2 pos):
         return self.v_from_xy_(self.xy_from_rel_xy_(pos))
     
-    cdef av v_from_xy_indices_(self, int[2] pos) except *:
+    cdef av v_from_xy_indices_(self, int[2] pos):
         return (<av *> self._arr)[pos[1] * self.width + pos[0]]
     
     cpdef av v_from_vector(self, vector) except *:
         return self.v_from_vector_(cp2v_3d(vector))
     
-    cdef av v_from_vector_(self, vec3 vector) nogil except *:
+    cdef av v_from_vector_(self, vec3 vector) nogil:
         return self.v_from_xy_(self.xy_from_vector_(vector))
     
     # setters
-    cpdef void set_xy(self, pos, vec) except *:
+    cpdef bint set_xy(self, pos, vec) except False:
         cdef int[2] pos_
         cdef av vec_
         pos_[0] = pos[0]
@@ -3243,13 +3293,14 @@ cdef class VecCubeSide(CubeSide):
         vec_.x = vec[0]
         vec_.y = vec[1]
         self.set_xy_(pos_, vec_)
+        return 1
     
-    cdef void set_xy_(self, int[2] pos, av vec) nogil except *:
+    cdef void set_xy_(self, int[2] pos, av vec) nogil:
         (<av *> self._arr)[pos[1] * self.width + pos[0]] = vec
     
     @cython.wraparound(False)
     @cython.initializedcheck(False)
-    cdef av sample(self, vec2 pos) nogil except *:
+    cdef av sample(self, vec2 pos) nogil:
         """
         Samples array at passed position
     
@@ -3319,10 +3370,11 @@ cdef class VecCubeSide(CubeSide):
 cdef class RegCubeMap(CubeMap):
     
     
-    cdef void _allocate_arr(self) except *:
+    cdef bint _allocate_arr(self) except False:
         self._arr = malloc(self.width * self.height * sizeof(rt))
+        return 1
     
-    cdef void clone(self, AbstractMap p) except *:
+    cdef bint clone(self, AbstractMap p) except False:
         """
         Clones passed map. If map is of a different type
         (ex: LatLonMap vs CubeMap) values will be copied depending on their
@@ -3339,8 +3391,9 @@ cdef class RegCubeMap(CubeMap):
             self.clone_(<RegCubeSide> p)
         else:
             raise TypeError(f'Unexpected prototype map type: {p}')
+        return 1
     
-    cdef void clone_(self, reg_map_t p) except *:
+    cdef bint clone_(self, reg_map_t p) except False:
         cdef vec2 pos
         cdef vec3 vector
         cdef int[2] map_pos
@@ -3355,48 +3408,50 @@ cdef class RegCubeMap(CubeMap):
                 map_pos[0] = x
                 map_pos[1] = y
                 self.set_xy_(map_pos, v)
+        return 1
     
     # value retrieval methods
     cpdef rt v_from_lat_lon(self, pos) except *:
         return self.v_from_lat_lon_(cp2ll(pos))
     
-    cdef rt v_from_lat_lon_(self, latlon pos) except *:
+    cdef rt v_from_lat_lon_(self, latlon pos):
         return self.v_from_xy_(self.xy_from_lat_lon_(pos))
     
     cpdef rt v_from_xy(self, pos) except *:
         return self.v_from_xy_(cp2v_2d(pos))
     
-    cdef rt v_from_xy_(self, vec2 pos) nogil except *:
+    cdef rt v_from_xy_(self, vec2 pos) nogil:
         return self.sample(pos)
     
     cpdef rt v_from_rel_xy(self, tuple pos) except *:
         return self.v_from_rel_xy_(cp2v_2d(pos))
     
-    cdef rt v_from_rel_xy_(self, vec2 pos) except *:
+    cdef rt v_from_rel_xy_(self, vec2 pos):
         return self.v_from_xy_(self.xy_from_rel_xy_(pos))
     
-    cdef rt v_from_xy_indices_(self, int[2] pos) except *:
+    cdef rt v_from_xy_indices_(self, int[2] pos):
         return (<rt *> self._arr)[pos[1] * self.width + pos[0]]
     
     cpdef rt v_from_vector(self, vector) except *:
         return self.v_from_vector_(cp2v_3d(vector))
     
-    cdef rt v_from_vector_(self, vec3 vector) nogil except *:
+    cdef rt v_from_vector_(self, vec3 vector) nogil:
         return self.v_from_xy_(self.xy_from_vector_(vector))
     
     # setters
-    cpdef void set_xy(self, pos, r) except *:
+    cpdef bint set_xy(self, pos, r) except False:
         cdef int[2] pos_
         pos_[0] = pos[0]
         pos_[1] = pos[1]
         self.set_xy_(pos_, r)
+        return 1
     
-    cdef void set_xy_(self, int[2] pos, rt r) nogil except *:
+    cdef void set_xy_(self, int[2] pos, rt r) nogil:
         (<rt *> self._arr)[pos[1] * self.width + pos[0]] = r
     
     @cython.wraparound(False)
     @cython.initializedcheck(False)
-    cdef rt sample(self, vec2 pos) nogil except *:
+    cdef rt sample(self, vec2 pos) nogil:
         """
         Samples array at passed position.
     
@@ -3460,10 +3515,11 @@ cdef class RegCubeMap(CubeMap):
 cdef class RegLatLonMap(LatLonMap):
     
     
-    cdef void _allocate_arr(self) except *:
+    cdef bint _allocate_arr(self) except False:
         self._arr = malloc(self.width * self.height * sizeof(rt))
+        return 1
     
-    cdef void clone(self, AbstractMap p) except *:
+    cdef bint clone(self, AbstractMap p) except False:
         """
         Clones passed map. If map is of a different type
         (ex: LatLonMap vs CubeMap) values will be copied depending on their
@@ -3480,8 +3536,9 @@ cdef class RegLatLonMap(LatLonMap):
             self.clone_(<RegCubeSide> p)
         else:
             raise TypeError(f'Unexpected prototype map type: {p}')
+        return 1
     
-    cdef void clone_(self, reg_map_t p) except *:
+    cdef bint clone_(self, reg_map_t p) except False:
         cdef vec2 pos
         cdef vec3 vector
         cdef int[2] map_pos
@@ -3496,48 +3553,50 @@ cdef class RegLatLonMap(LatLonMap):
                 map_pos[0] = x
                 map_pos[1] = y
                 self.set_xy_(map_pos, v)
+        return 1
     
     # value retrieval methods
     cpdef rt v_from_lat_lon(self, pos) except *:
         return self.v_from_lat_lon_(cp2ll(pos))
     
-    cdef rt v_from_lat_lon_(self, latlon pos) except *:
+    cdef rt v_from_lat_lon_(self, latlon pos):
         return self.v_from_xy_(self.xy_from_lat_lon_(pos))
     
     cpdef rt v_from_xy(self, pos) except *:
         return self.v_from_xy_(cp2v_2d(pos))
     
-    cdef rt v_from_xy_(self, vec2 pos) nogil except *:
+    cdef rt v_from_xy_(self, vec2 pos) nogil:
         return self.sample(pos)
     
     cpdef rt v_from_rel_xy(self, tuple pos) except *:
         return self.v_from_rel_xy_(cp2v_2d(pos))
     
-    cdef rt v_from_rel_xy_(self, vec2 pos) except *:
+    cdef rt v_from_rel_xy_(self, vec2 pos):
         return self.v_from_xy_(self.xy_from_rel_xy_(pos))
     
-    cdef rt v_from_xy_indices_(self, int[2] pos) except *:
+    cdef rt v_from_xy_indices_(self, int[2] pos):
         return (<rt *> self._arr)[pos[1] * self.width + pos[0]]
     
     cpdef rt v_from_vector(self, vector) except *:
         return self.v_from_vector_(cp2v_3d(vector))
     
-    cdef rt v_from_vector_(self, vec3 vector) nogil except *:
+    cdef rt v_from_vector_(self, vec3 vector) nogil:
         return self.v_from_xy_(self.xy_from_vector_(vector))
     
     # setters
-    cpdef void set_xy(self, pos, r) except *:
+    cpdef bint set_xy(self, pos, r) except False:
         cdef int[2] pos_
         pos_[0] = pos[0]
         pos_[1] = pos[1]
         self.set_xy_(pos_, r)
+        return 1
     
-    cdef void set_xy_(self, int[2] pos, rt r) nogil except *:
+    cdef void set_xy_(self, int[2] pos, rt r) nogil:
         (<rt *> self._arr)[pos[1] * self.width + pos[0]] = r
     
     @cython.wraparound(False)
     @cython.initializedcheck(False)
-    cdef rt sample(self, vec2 pos) nogil except *:
+    cdef rt sample(self, vec2 pos) nogil:
         """
         Samples array at passed position.
     
@@ -3601,10 +3660,11 @@ cdef class RegLatLonMap(LatLonMap):
 cdef class RegTileMap(TileMap):
     
     
-    cdef void _allocate_arr(self) except *:
+    cdef bint _allocate_arr(self) except False:
         self._arr = malloc(self.width * self.height * sizeof(rt))
+        return 1
     
-    cdef void clone(self, AbstractMap p) except *:
+    cdef bint clone(self, AbstractMap p) except False:
         """
         Clones passed map. If map is of a different type
         (ex: LatLonMap vs CubeMap) values will be copied depending on their
@@ -3621,8 +3681,9 @@ cdef class RegTileMap(TileMap):
             self.clone_(<RegCubeSide> p)
         else:
             raise TypeError(f'Unexpected prototype map type: {p}')
+        return 1
     
-    cdef void clone_(self, reg_map_t p) except *:
+    cdef bint clone_(self, reg_map_t p) except False:
         cdef vec2 pos
         cdef vec3 vector
         cdef int[2] map_pos
@@ -3637,48 +3698,50 @@ cdef class RegTileMap(TileMap):
                 map_pos[0] = x
                 map_pos[1] = y
                 self.set_xy_(map_pos, v)
+        return 1
     
     # value retrieval methods
     cpdef rt v_from_lat_lon(self, pos) except *:
         return self.v_from_lat_lon_(cp2ll(pos))
     
-    cdef rt v_from_lat_lon_(self, latlon pos) except *:
+    cdef rt v_from_lat_lon_(self, latlon pos):
         return self.v_from_xy_(self.xy_from_lat_lon_(pos))
     
     cpdef rt v_from_xy(self, pos) except *:
         return self.v_from_xy_(cp2v_2d(pos))
     
-    cdef rt v_from_xy_(self, vec2 pos) nogil except *:
+    cdef rt v_from_xy_(self, vec2 pos) nogil:
         return self.sample(pos)
     
     cpdef rt v_from_rel_xy(self, tuple pos) except *:
         return self.v_from_rel_xy_(cp2v_2d(pos))
     
-    cdef rt v_from_rel_xy_(self, vec2 pos) except *:
+    cdef rt v_from_rel_xy_(self, vec2 pos):
         return self.v_from_xy_(self.xy_from_rel_xy_(pos))
     
-    cdef rt v_from_xy_indices_(self, int[2] pos) except *:
+    cdef rt v_from_xy_indices_(self, int[2] pos):
         return (<rt *> self._arr)[pos[1] * self.width + pos[0]]
     
     cpdef rt v_from_vector(self, vector) except *:
         return self.v_from_vector_(cp2v_3d(vector))
     
-    cdef rt v_from_vector_(self, vec3 vector) nogil except *:
+    cdef rt v_from_vector_(self, vec3 vector) nogil:
         return self.v_from_xy_(self.xy_from_vector_(vector))
     
     # setters
-    cpdef void set_xy(self, pos, r) except *:
+    cpdef bint set_xy(self, pos, r) except False:
         cdef int[2] pos_
         pos_[0] = pos[0]
         pos_[1] = pos[1]
         self.set_xy_(pos_, r)
+        return 1
     
-    cdef void set_xy_(self, int[2] pos, rt r) nogil except *:
+    cdef void set_xy_(self, int[2] pos, rt r) nogil:
         (<rt *> self._arr)[pos[1] * self.width + pos[0]] = r
     
     @cython.wraparound(False)
     @cython.initializedcheck(False)
-    cdef rt sample(self, vec2 pos) nogil except *:
+    cdef rt sample(self, vec2 pos) nogil:
         """
         Samples array at passed position.
     
@@ -3742,10 +3805,11 @@ cdef class RegTileMap(TileMap):
 cdef class RegCubeSide(CubeSide):
     
     
-    cdef void _allocate_arr(self) except *:
+    cdef bint _allocate_arr(self) except False:
         self._arr = malloc(self.width * self.height * sizeof(rt))
+        return 1
     
-    cdef void clone(self, AbstractMap p) except *:
+    cdef bint clone(self, AbstractMap p) except False:
         """
         Clones passed map. If map is of a different type
         (ex: LatLonMap vs CubeMap) values will be copied depending on their
@@ -3762,8 +3826,9 @@ cdef class RegCubeSide(CubeSide):
             self.clone_(<RegCubeSide> p)
         else:
             raise TypeError(f'Unexpected prototype map type: {p}')
+        return 1
     
-    cdef void clone_(self, reg_map_t p) except *:
+    cdef bint clone_(self, reg_map_t p) except False:
         cdef vec2 pos
         cdef vec3 vector
         cdef int[2] map_pos
@@ -3778,48 +3843,50 @@ cdef class RegCubeSide(CubeSide):
                 map_pos[0] = x
                 map_pos[1] = y
                 self.set_xy_(map_pos, v)
+        return 1
     
     # value retrieval methods
     cpdef rt v_from_lat_lon(self, pos) except *:
         return self.v_from_lat_lon_(cp2ll(pos))
     
-    cdef rt v_from_lat_lon_(self, latlon pos) except *:
+    cdef rt v_from_lat_lon_(self, latlon pos):
         return self.v_from_xy_(self.xy_from_lat_lon_(pos))
     
     cpdef rt v_from_xy(self, pos) except *:
         return self.v_from_xy_(cp2v_2d(pos))
     
-    cdef rt v_from_xy_(self, vec2 pos) nogil except *:
+    cdef rt v_from_xy_(self, vec2 pos) nogil:
         return self.sample(pos)
     
     cpdef rt v_from_rel_xy(self, tuple pos) except *:
         return self.v_from_rel_xy_(cp2v_2d(pos))
     
-    cdef rt v_from_rel_xy_(self, vec2 pos) except *:
+    cdef rt v_from_rel_xy_(self, vec2 pos):
         return self.v_from_xy_(self.xy_from_rel_xy_(pos))
     
-    cdef rt v_from_xy_indices_(self, int[2] pos) except *:
+    cdef rt v_from_xy_indices_(self, int[2] pos):
         return (<rt *> self._arr)[pos[1] * self.width + pos[0]]
     
     cpdef rt v_from_vector(self, vector) except *:
         return self.v_from_vector_(cp2v_3d(vector))
     
-    cdef rt v_from_vector_(self, vec3 vector) nogil except *:
+    cdef rt v_from_vector_(self, vec3 vector) nogil:
         return self.v_from_xy_(self.xy_from_vector_(vector))
     
     # setters
-    cpdef void set_xy(self, pos, r) except *:
+    cpdef bint set_xy(self, pos, r) except False:
         cdef int[2] pos_
         pos_[0] = pos[0]
         pos_[1] = pos[1]
         self.set_xy_(pos_, r)
+        return 1
     
-    cdef void set_xy_(self, int[2] pos, rt r) nogil except *:
+    cdef void set_xy_(self, int[2] pos, rt r) nogil:
         (<rt *> self._arr)[pos[1] * self.width + pos[0]] = r
     
     @cython.wraparound(False)
     @cython.initializedcheck(False)
-    cdef rt sample(self, vec2 pos) nogil except *:
+    cdef rt sample(self, vec2 pos) nogil:
         """
         Samples array at passed position.
     
@@ -3928,7 +3995,7 @@ cpdef lat_lon_from_vector(vector):
 
 IF ASSERTS:
     @cython.wraparound(False)
-    cdef latlon lat_lon_from_vector_(vec3 vector) nogil except *:
+    cdef latlon lat_lon_from_vector_(vec3 vector) nogil:
         with gil:
             assert not isnan(vector.x), vector
             assert not isnan(vector.y), vector
@@ -3972,7 +4039,7 @@ cpdef rt pure_region(int region_code) except *:
     return pure_region_(region_code)
 
 
-cdef rt pure_region_(int region_code) nogil except *:
+cdef rt pure_region_(int region_code) nogil:
     """
     Creates new region struct using a single region code
     :param region_code: int identifier for region.
@@ -4006,7 +4073,7 @@ cpdef rt mix_region(rt r0, float w0, rt r1, float w1) except *:
 
 
 @cython.cdivision(True)
-cdef rt mix_region_(rt r0, float w0, rt r1, float w1) nogil except *:
+cdef rt mix_region_(rt r0, float w0, rt r1, float w1) nogil:
     """
     Combines passed region structs using passed weights
     :param r0: rt
@@ -4133,7 +4200,7 @@ cpdef mix_av(v0, float w0, v1, float w1):
     return r.x, r.y
 
 @cython.cdivision(True)
-cdef av mix_av_(av v0, float w0, av v1, float w1) nogil except *:
+cdef av mix_av_(av v0, float w0, av v1, float w1) nogil:
     cdef av vf
 
     # adjust weights if needed
