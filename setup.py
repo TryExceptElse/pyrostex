@@ -11,7 +11,12 @@ from Cython.Build import cythonize
 from sys import argv
 from zipfile import ZipFile
 from subprocess import call
-from cymacro import ExtExpCol
+
+try:
+    from cymacro import ExtExpCol
+    cymacro = True
+except ModuleNotFoundError:
+    cymacro = False
 
 from settings import FLAGS_PXI_PATH, PLANET_GEN_DIR, PLANET_ZIP, \
     PLANET_GEN_EXE, PLANET_GEN_PATH
@@ -83,7 +88,26 @@ test_extensions = [
     ),
 ]
 
-macro_expander = ExtExpCol()
+# if cymacro is present, create an
+# Extension Expander Collection.
+# otherwise, just create a function that ignores macro sources
+# in favor of previously generated files
+if cymacro:
+    macro_expander = ExtExpCol()
+else:
+    def macro_expander(extensions):
+        for ext in extensions:
+            new_sources = []
+            for src in ext.sources:
+                if src.endswith('.cm'):
+                    src = src[:-3]
+                new_sources.append(src)
+            ext.sources = new_sources
+        return extensions
+
+
+c_args = ['-ffast-math', '-Ofast']
+cpp_args = ['-ffast-math', '-Ofast', '-std=c++11']
 
 # run setup
 setup(
@@ -93,30 +117,30 @@ setup(
             Extension(
                 name='pyrostex.map',
                 sources=['pyrostex/map.pyx.cm'],
-                extra_compile_args=["-ffast-math", "-Ofast"],
+                extra_compile_args=c_args,
             ),
             Extension(
                 name='pyrostex.brush',
                 sources=['pyrostex/brush.pyx'],
-                extra_compile_args=["-ffast-math", "-Ofast"],
+                extra_compile_args=c_args,
             ),
             Extension(
                 name='pyrostex.temp',
                 sources=['pyrostex/temp.pyx'],
-                extra_compile_args=["-ffast-math", "-Ofast"]
+                extra_compile_args=c_args
             ),
             Extension(
                 name='pyrostex.height',
                 sources=['pyrostex/height.pyx'],
                 language='c++',
-                extra_compile_args=["-ffast-math", "-Ofast", "-fopenmp"],
+                extra_compile_args=cpp_args + ["-fopenmp"],
                 extra_link_args=['-fopenmp'],
             ),
             Extension(
                 name='pyrostex.wind',
                 sources=['pyrostex/wind.pyx'],
                 language='c++',
-                extra_compile_args=["-ffast-math", "-Ofast"]
+                extra_compile_args=cpp_args
             ),
             Extension(
                 name='pyrostex.noise.noise',
@@ -125,7 +149,7 @@ setup(
                     'pyrostex/noise/FastNoise.cpp'
                 ],
                 language="c++",  # use of FastNoise class requires c++
-                extra_compile_args=["-ffast-math", "-Ofast"],
+                extra_compile_args=cpp_args,
             ),
         ] + (test_extensions if 'test' in flags else [])
         ),

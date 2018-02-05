@@ -1,6 +1,9 @@
 include "flags.pxi"
 
-from cymacro import macro  # dummy function for defining macros
+try:
+    from cymacro import macro  # dummy function for defining macros
+except ModuleNotFoundError:
+    pass
 
 from .includes.cmathutils cimport vec2, vec3, mat3x3
 from .includes.structs cimport latlon

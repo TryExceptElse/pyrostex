@@ -33,7 +33,7 @@ from math import radians
 from libc.math cimport cos, sin, atan2, sqrt, pow, fabs, ceil, log2, isnan
 from libc.stdlib cimport malloc, free
 
-from cymacro import macro  # dummy function for defining macros
+# from cymacro import macro  # dummy function for defining macros
 
 # project imports
 from .includes cimport cmathutils as mu

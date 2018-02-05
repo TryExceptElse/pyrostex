@@ -72,7 +72,7 @@ class Spheroid:
 
         # check dir exists
         if not os.path.exists(self.dir_path):
-            os.mkdir(self.dir_path)
+            os.makedirs(self.dir_path)
 
         # generate highest level maps
         self.build()
