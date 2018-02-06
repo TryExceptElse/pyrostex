@@ -1623,6 +1623,11 @@ cdef class TileMap(AbstractMap):
                 with gil:
                     raise ValueError(
                         'Invalid face index: {}'.format(self.cube_face))
+            ELSE:
+                fprintf(stderr,
+                    'TileMap.vector_from_xy_(): invalid face: %d\n',
+                    self.cube_face)
+                return mu.vec3Nan()
         return vector
 
 

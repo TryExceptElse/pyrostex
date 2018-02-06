@@ -17,9 +17,14 @@ added to this file as they are needed.
 
 cimport cython
 
-from libc.math cimport sin, cos, sqrt, pow, floor, isnan, NAN
+from libc.math cimport sin, cos, sqrt, pow, floor, NAN
 
 ctypedef double ft
+
+
+cdef extern from "isnan.h":
+    int isnan(long double) nogil
+
 
 cdef extern from "ccVector.h":
 

@@ -193,14 +193,14 @@ def set_up_project():
                     name='pyrostex.height',
                     sources=['pyrostex/height.pyx'],
                     language='c++',
-                    extra_compile_args=["-fopenmp", '-std=c++11', '-Ofast'],
+                    extra_compile_args=["-fopenmp", '-std=c++11'],
                     extra_link_args=['-fopenmp'],
                 ),
                 Extension(
                     name='pyrostex.wind',
                     sources=['pyrostex/wind.pyx'],
                     language='c++',
-                    extra_compile_args=["-ffast-math", "-Ofast"]
+                    extra_compile_args=["-ffast-math", "-Ofast", '-std=c++11']
                 ),
                 Extension(
                     name='pyrostex.noise.noise',
